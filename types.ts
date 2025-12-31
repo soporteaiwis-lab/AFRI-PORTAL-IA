@@ -13,6 +13,8 @@ export interface User {
     completed: number;
     total: number;
   };
+  // Add this field to track individual classes status in DB
+  progress_details?: Record<string, boolean>; 
 }
 
 export interface ClassSession {

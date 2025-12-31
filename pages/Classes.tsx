@@ -1,59 +1,46 @@
 import React, { useState, useEffect } from 'react';
 import { COURSE_CONTENT } from '../constants';
 import { ClassSession, User } from '../types';
-import { Play, CheckCircle, Lock, FileText, BrainCircuit, Circle, Calendar } from 'lucide-react';
+import { Play, CheckCircle, Lock, FileText, BrainCircuit, Circle, Calendar, Loader2 } from 'lucide-react';
 import VideoModal from '../components/VideoModal';
-import { saveUserProgress, VideoMap } from '../services/dataService';
+import { VideoMap } from '../services/dataService';
 
 interface ClassesProps {
   user: User;
   videos: VideoMap;
-  onUpdateProgress: (count: number, progressJson: Record<string, boolean>) => void;
+  onUpdateProgress: (count: number, progressJson: Record<string, boolean>) => Promise<void>;
 }
 
 const Classes: React.FC<ClassesProps> = ({ user, videos, onUpdateProgress }) => {
   const [selectedSession, setSelectedSession] = useState<ClassSession | null>(null);
   const [selectedWeekId, setSelectedWeekId] = useState<number | null>(null);
-  const [activeTab, setActiveTab] = useState(1); // 1 = Phase 1 (Weeks 1-3), 2 = Phase 2 (Weeks 4-6)
+  const [activeTab, setActiveTab] = useState(1);
   const [activeWeekTab, setActiveWeekTab] = useState(1);
-  const [localProgress, setLocalProgress] = useState<Record<string, boolean>>({});
-
-  useEffect(() => {
-    const saved = localStorage.getItem('simpledata_progress');
-    if (saved) {
-        try {
-            setLocalProgress(JSON.parse(saved));
-        } catch(e) { console.error("Error parsing local progress"); }
-    }
-  }, []);
+  const [updating, setUpdating] = useState(false);
 
   const handleMarkComplete = async (session: ClassSession, weekId: number) => {
-     // Key format: "s{week}-c{sessionNumber}" e.g., "s1-c1"
-     const progressKey = `s${weekId}-c${session.sessionNumber}`;
+     setUpdating(true);
      
-     const currentStatus = localProgress[progressKey] || false;
-     const newStatus = !currentStatus;
-
-     const newProgress = {
-         ...localProgress,
+     const progressKey = `s${weekId}-c${session.sessionNumber}`;
+     const currentDetails = user.progress_details || {};
+     const newStatus = !currentDetails[progressKey];
+     
+     const newProgressJson = {
+         ...currentDetails,
          [progressKey]: newStatus
      };
-
-     setLocalProgress(newProgress);
      
-     // Update Modal State if open
+     const newCount = Object.values(newProgressJson).filter(v => v === true).length;
+     
+     // Calls App.tsx to update state and save to Cloud
+     await onUpdateProgress(newCount, newProgressJson);
+     
+     setUpdating(false);
+     
+     // Update local modal state
      if (selectedSession && selectedSession.id === session.id) {
          setSelectedSession({ ...selectedSession, isCompleted: newStatus });
      }
-     
-     // Calculate new count
-     const completadas = Object.values(newProgress).filter(v => v === true).length;
-
-     // 1. Update Global State (App.tsx) -> Updates Dashboard & Students page immediately
-     onUpdateProgress(completadas, newProgress);
-
-     // 2. Persist to Cloud
-     await saveUserProgress(user, newProgress);
   };
   
   const extractVideoId = (url: string) => {
@@ -64,23 +51,17 @@ const Classes: React.FC<ClassesProps> = ({ user, videos, onUpdateProgress }) => 
   };
 
   const getResourceLinks = (weekId: number, sessionNum: number) => {
-      // Logic for 12 classes total
-      // (Week - 1) * 2 + SessionNum
       const classNumber = (weekId - 1) * 2 + sessionNum;
       const formattedNum = String(classNumber).padStart(2, '0');
-      
       const baseUrl = "https://raw.githack.com/soporteaiwis-lab/simpledata/main";
-      
       return {
           textUrl: `${baseUrl}/clase${formattedNum}.html`,
           quizUrl: `${baseUrl}/quiz${formattedNum}.html`
       };
   };
 
-  // Determine weeks to show based on Phase
   const weeksToShow = activeTab === 1 ? [1, 2, 3] : [4, 5, 6];
 
-  // Default active week logic
   useEffect(() => {
     setActiveWeekTab(weeksToShow[0]);
   }, [activeTab]);
@@ -135,16 +116,15 @@ const Classes: React.FC<ClassesProps> = ({ user, videos, onUpdateProgress }) => 
                         <span className="bg-slate-800 text-slate-400 text-xs px-2 py-1 rounded border border-slate-700">2 Sesiones</span>
                     </div>
                     
-                    {/* Grid for 2 cards per row */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         {week.sessions.map((session) => {
-                            // Resolve Data
                             const videoMapKey = `${week.id}-${session.sessionNumber}`;
                             const realVideoUrl = videos[videoMapKey] || '';
                             const videoId = extractVideoId(realVideoUrl);
                             
+                            // SOURCE OF TRUTH: User prop from App (Fetched from Cloud)
                             const progressKey = `s${week.id}-c${session.sessionNumber}`;
-                            const isCompleted = localProgress[progressKey] || false;
+                            const isCompleted = user.progress_details?.[progressKey] || false;
                             
                             const { textUrl, quizUrl } = getResourceLinks(week.id, session.sessionNumber);
                             
@@ -155,7 +135,6 @@ const Classes: React.FC<ClassesProps> = ({ user, videos, onUpdateProgress }) => 
                                     key={session.id} 
                                     className="bg-surface border border-slate-800 rounded-2xl overflow-hidden hover:border-primary hover:shadow-2xl hover:shadow-blue-900/20 transition-all duration-300 group/card flex flex-col"
                                 >
-                                    {/* Thumbnail Area */}
                                     <div 
                                         className="h-56 bg-slate-900 relative overflow-hidden cursor-pointer"
                                         onClick={() => {
@@ -178,22 +157,22 @@ const Classes: React.FC<ClassesProps> = ({ user, videos, onUpdateProgress }) => 
                                         
                                         <div className="absolute inset-0 bg-gradient-to-t from-surface via-transparent to-transparent opacity-90"></div>
                                         
-                                        {/* Status & Date Badges */}
                                         <div className="absolute top-3 right-3 z-10 flex flex-col gap-2 items-end">
                                              <button 
+                                                disabled={updating}
                                                 onClick={(e) => {
                                                     e.stopPropagation();
                                                     handleMarkComplete(session, week.id);
                                                 }}
                                                 className={`
-                                                    flex items-center gap-1 px-3 py-1.5 rounded-full text-[11px] font-bold shadow-lg backdrop-blur-md border transition-all
+                                                    flex items-center gap-1 px-3 py-1.5 rounded-full text-[11px] font-bold shadow-lg backdrop-blur-md border transition-all disabled:opacity-50
                                                     ${isCompleted 
                                                         ? 'bg-green-500 text-white border-green-400 hover:bg-green-600' 
                                                         : 'bg-black/50 text-slate-300 border-slate-600 hover:bg-white hover:text-black hover:border-white'}
                                                 `}
                                             >
                                                 {isCompleted ? <CheckCircle size={12} className="fill-current" /> : <Circle size={12} />}
-                                                {isCompleted ? 'VISTO' : 'MARCAR'}
+                                                {isCompleted ? 'VISTO' : (updating ? '...' : 'MARCAR')}
                                             </button>
 
                                             {session.date && session.date !== 'Por definir' && (
@@ -220,7 +199,6 @@ const Classes: React.FC<ClassesProps> = ({ user, videos, onUpdateProgress }) => 
                                         )}
                                     </div>
 
-                                    {/* Content Area */}
                                     <div className="p-6 flex-1 flex flex-col">
                                         <p className="text-slate-400 line-clamp-3 mb-6 flex-1">{session.description}</p>
                                         

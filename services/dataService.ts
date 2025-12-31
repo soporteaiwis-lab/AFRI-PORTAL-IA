@@ -1,13 +1,12 @@
 import { User } from '../types';
 
-// IMPORTANT: The Apps Script connected to this URL must be updated to handle 'Progreso3'
+// Configuration for Google Sheets (The Source of Truth)
 const SPREADSHEET_ID = '13rQdIhzb-Ve9GAClQwopVtS9u2CpGTj2aUy528a7YSw';
-// Public Read-Only Key for client-side fetching (Standard practice for public/semi-public sheets)
 const API_KEY = 'AIzaSyCzPHhigfOD6oHw26JftVg3YyKLijwbyY4';
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwxHzlEhCYVZaPSJl4V6ptxcDkefM_SUJbwqpgVB9gZV3SGVbWYB3EGMf6tHP0PfET62w/exec';
 
 export interface VideoMap {
-  [key: string]: string; // key: "week-sessionNumber", value: url
+  [key: string]: string; 
 }
 
 export const fetchAllData = async () => {
@@ -87,6 +86,7 @@ const processData = (usersData: any, skillsData: any, progressData: any, videosD
           avatar: row[1].charAt(0).toUpperCase(),
           stats: skillsMap[email] || { prompting: 0, tools: 0, analysis: 0 },
           progress: progressMap[email] || { completed: 0, total: 12 },
+          progress_details: progressJsonMap[email] || {}
         });
       }
     });
@@ -111,18 +111,13 @@ export const saveUserProgress = async (user: User, progressJson: Record<string, 
   const completadas = Object.values(progressJson).filter(v => v === true).length;
   const jsonString = JSON.stringify(progressJson);
 
-  console.log("Saving progress to cloud (AFRI)...", { email: user.email, completadas });
-
   try {
-    // We use mode: 'no-cors' because Google Apps Script Web Apps don't strictly support CORS preflight
-    // for simple POST requests in this context. 
-    // This means we won't get a readable JSON response in the browser, 
-    // but the request will execute on the server if the payload is correct.
+    // Call Apps Script to save to Google Sheets
     await fetch(APPS_SCRIPT_URL, {
         method: 'POST',
         mode: 'no-cors', 
         headers: {
-            'Content-Type': 'text/plain;charset=utf-8', // Important for Apps Script compatibility
+            'Content-Type': 'text/plain;charset=utf-8',
         },
         body: JSON.stringify({
             portal: 'afri', 
