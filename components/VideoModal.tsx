@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { X, PlayCircle, FileText, CheckCircle, AlignLeft, BrainCircuit, RotateCcw, Award } from 'lucide-react';
+import { X, PlayCircle, FileText, CheckCircle, AlignLeft, BrainCircuit, RotateCcw, Award, Sparkles, FileType } from 'lucide-react';
 import { ClassSession } from '../types';
-import { generateQuizFromText, QuizQuestion } from '../services/geminiService';
+import { generateQuizFromText, generateSummaryFromText, QuizQuestion } from '../services/geminiService';
 
 interface VideoModalProps {
   session: ClassSession | null;
@@ -11,12 +11,14 @@ interface VideoModalProps {
 }
 
 const VideoModal: React.FC<VideoModalProps> = ({ session, onClose, onMarkComplete, weekId }) => {
-  const [activeTab, setActiveTab] = useState<'description' | 'transcript' | 'quiz'>('description');
+  const [activeTab, setActiveTab] = useState<'description' | 'transcript' | 'summary' | 'quiz'>('description');
   const [transcriptHtml, setTranscriptHtml] = useState<string>('');
   const [rawTranscript, setRawTranscript] = useState<string>('');
   const [loadingTranscript, setLoadingTranscript] = useState(false);
   
-  // Quiz State
+  // AI State
+  const [summary, setSummary] = useState<string>('');
+  const [loadingSummary, setLoadingSummary] = useState(false);
   const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[]>([]);
   const [quizLoading, setQuizLoading] = useState(false);
   const [quizStarted, setQuizStarted] = useState(false);
@@ -31,12 +33,16 @@ const VideoModal: React.FC<VideoModalProps> = ({ session, onClose, onMarkComplet
         setQuizStarted(false);
         setShowResults(false);
         setUserAnswers([]);
+        setSummary('');
+        setRawTranscript('');
+        setTranscriptHtml('');
     }
   }, [session]);
 
+  // Load Transcript automatically if needed for AI tabs
   useEffect(() => {
-    if (session && (activeTab === 'transcript' || activeTab === 'quiz')) {
-      if (!rawTranscript) {
+    if (session && (activeTab === 'transcript' || activeTab === 'quiz' || activeTab === 'summary')) {
+      if (!rawTranscript && !loadingTranscript) {
           loadTranscript();
       }
     }
@@ -46,16 +52,18 @@ const VideoModal: React.FC<VideoModalProps> = ({ session, onClose, onMarkComplet
     if (!session || !weekId) return;
     
     setLoadingTranscript(true);
-    const dayName = session.day.toLowerCase().trim();
+    // Construct URL for transcripts - Assuming standard naming convention
+    const dayName = session.day.replace('Clase ', 'clase').trim();
+    // Use fallback logic or standard naming. Assuming "fase1-semanaX-claseY.md" or similar based on GitHub
     const url = `https://raw.githubusercontent.com/soporteaiwis-lab/simpledata/main/transcripts/fase1-semana${weekId}-${dayName}.md`;
 
     try {
       const response = await fetch(url);
       if (response.ok) {
         const text = await response.text();
-        setRawTranscript(text); // Store raw for AI
+        setRawTranscript(text); 
         
-        // HTML Formatting for display
+        // Simple Markdown to HTML parser for display
         const html = text
           .replace(/^### (.*$)/gim, '<h3 class="text-lg font-bold text-primary mt-6 mb-2">$1</h3>')
           .replace(/^## (.*$)/gim, '<h2 class="text-xl font-bold text-white mt-8 mb-4 border-b border-slate-700 pb-2">$1</h2>')
@@ -75,24 +83,37 @@ const VideoModal: React.FC<VideoModalProps> = ({ session, onClose, onMarkComplet
     }
   };
 
+  const handleGenerateSummary = async () => {
+      if (!rawTranscript) {
+          await loadTranscript();
+          if (!rawTranscript) return; 
+      }
+      setLoadingSummary(true);
+      const result = await generateSummaryFromText(rawTranscript);
+      setSummary(result);
+      setLoadingSummary(false);
+  };
+
   const startQuiz = async () => {
       setQuizLoading(true);
       try {
-          // If we don't have transcript yet, wait for it (unlikely due to UI flow, but safe)
           let textToAnalyze = rawTranscript;
           if (!textToAnalyze) {
-             // Try fetching if user went straight to quiz without loading transcript tab
              await loadTranscript();
              textToAnalyze = rawTranscript; 
           }
 
           if (textToAnalyze) {
               const questions = await generateQuizFromText(textToAnalyze);
-              setQuizQuestions(questions);
-              setQuizStarted(true);
-              setUserAnswers(new Array(questions.length).fill(-1));
+              if (questions.length > 0) {
+                setQuizQuestions(questions);
+                setQuizStarted(true);
+                setUserAnswers(new Array(questions.length).fill(-1));
+              } else {
+                alert("No se pudo generar el quiz. Intenta de nuevo.");
+              }
           } else {
-              alert("No se pudo cargar la transcripción para generar el quiz.");
+              alert("No hay transcripción disponible para generar el quiz.");
           }
       } catch (e) {
           console.error(e);
@@ -157,31 +178,23 @@ const VideoModal: React.FC<VideoModalProps> = ({ session, onClose, onMarkComplet
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-slate-700 bg-slate-800/80">
-            <button 
-                onClick={() => setActiveTab('description')}
-                className={`flex-1 py-4 text-sm font-medium border-b-2 transition-colors ${activeTab === 'description' ? 'border-primary text-white bg-slate-800' : 'border-transparent text-slate-400 hover:text-white hover:bg-slate-700/50'}`}
-            >
-                <div className="flex items-center justify-center gap-2">
-                    <AlignLeft size={16} /> Descripción
-                </div>
-            </button>
-            <button 
-                onClick={() => setActiveTab('transcript')}
-                className={`flex-1 py-4 text-sm font-medium border-b-2 transition-colors ${activeTab === 'transcript' ? 'border-primary text-white bg-slate-800' : 'border-transparent text-slate-400 hover:text-white hover:bg-slate-700/50'}`}
-            >
-                <div className="flex items-center justify-center gap-2">
-                    <FileText size={16} /> Transcripción
-                </div>
-            </button>
-            <button 
-                onClick={() => setActiveTab('quiz')}
-                className={`flex-1 py-4 text-sm font-medium border-b-2 transition-colors ${activeTab === 'quiz' ? 'border-primary text-white bg-slate-800' : 'border-transparent text-slate-400 hover:text-white hover:bg-slate-700/50'}`}
-            >
-                <div className="flex items-center justify-center gap-2">
-                    <BrainCircuit size={16} /> Quiz IA
-                </div>
-            </button>
+        <div className="flex border-b border-slate-700 bg-slate-800/80 overflow-x-auto">
+            {[
+                { id: 'description', icon: AlignLeft, label: 'Descripción' },
+                { id: 'summary', icon: Sparkles, label: 'Resumen IA' },
+                { id: 'quiz', icon: BrainCircuit, label: 'Quiz (5)' },
+                { id: 'transcript', icon: FileType, label: 'Transcripción' },
+            ].map((tab) => (
+                <button 
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id as any)}
+                    className={`flex-1 min-w-[100px] py-4 text-xs md:text-sm font-medium border-b-2 transition-colors ${activeTab === tab.id ? 'border-primary text-white bg-slate-800' : 'border-transparent text-slate-400 hover:text-white hover:bg-slate-700/50'}`}
+                >
+                    <div className="flex items-center justify-center gap-2">
+                        <tab.icon size={16} /> {tab.label}
+                    </div>
+                </button>
+            ))}
         </div>
 
         {/* Content Body */}
@@ -209,24 +222,58 @@ const VideoModal: React.FC<VideoModalProps> = ({ session, onClose, onMarkComplet
                 </div>
             )}
 
+            {activeTab === 'summary' && (
+                <div className="animate-in slide-in-from-right-4 duration-300 h-full">
+                    {!summary && !loadingSummary ? (
+                        <div className="flex flex-col items-center justify-center h-full text-center py-12">
+                            <div className="w-16 h-16 bg-purple-500/20 text-purple-400 rounded-2xl flex items-center justify-center mb-6">
+                                <Sparkles size={32} />
+                            </div>
+                            <h3 className="text-xl font-bold text-white mb-2">Resumen Inteligente</h3>
+                            <p className="text-slate-400 max-w-sm mb-6">
+                                Genera un resumen ejecutivo de la clase utilizando los modelos más avanzados de Gemini.
+                            </p>
+                            <button 
+                                onClick={handleGenerateSummary}
+                                disabled={loadingTranscript && !rawTranscript}
+                                className="px-6 py-3 bg-white text-dark font-bold rounded-xl hover:bg-slate-200 transition-colors flex items-center gap-2"
+                            >
+                                <Sparkles size={18} /> Generar Resumen
+                            </button>
+                        </div>
+                    ) : loadingSummary ? (
+                        <div className="flex flex-col items-center justify-center py-20">
+                            <div className="w-10 h-10 border-4 border-purple-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+                            <p className="text-purple-400 animate-pulse">Analizando clase...</p>
+                        </div>
+                    ) : (
+                        <div className="prose prose-invert max-w-none prose-p:text-slate-300 prose-headings:text-white prose-strong:text-purple-400">
+                             <div className="bg-slate-800/50 p-6 rounded-xl border border-slate-700 whitespace-pre-line">
+                                {summary}
+                             </div>
+                        </div>
+                    )}
+                </div>
+            )}
+
             {activeTab === 'transcript' && (
                 <div className="animate-in slide-in-from-right-4 duration-300">
                     {loadingTranscript ? (
                         <div className="flex flex-col items-center justify-center py-12 text-slate-500">
                             <div className="w-8 h-8 border-4 border-slate-600 border-t-primary rounded-full animate-spin mb-4"></div>
-                            <p>Cargando transcripción...</p>
+                            <p>Descargando transcripción...</p>
                         </div>
                     ) : transcriptHtml === 'ERROR_NOT_FOUND' ? (
                         <div className="flex flex-col items-center justify-center py-12 text-center">
                             <div className="bg-slate-800 p-4 rounded-full mb-4">
-                                <FileText size={32} class="text-slate-500" />
+                                <FileText size={32} className="text-slate-500" />
                             </div>
                             <p className="text-slate-400 text-lg font-medium">Transcripción no disponible</p>
-                            <p className="text-slate-500 text-sm mt-1">Aún no se ha subido el archivo para esta clase.</p>
+                            <p className="text-slate-500 text-sm mt-1">El archivo fuente no se encuentra en el repositorio.</p>
                         </div>
                     ) : (
                         <div 
-                            className="prose prose-invert max-w-none"
+                            className="prose prose-invert max-w-none text-sm md:text-base"
                             dangerouslySetInnerHTML={{ __html: transcriptHtml }}
                         />
                     )}
@@ -242,19 +289,19 @@ const VideoModal: React.FC<VideoModalProps> = ({ session, onClose, onMarkComplet
                             </div>
                             <h3 className="text-2xl font-bold text-white mb-2">Quiz Generado con IA</h3>
                             <p className="text-slate-400 max-w-md mb-8">
-                                La Inteligencia Artificial analizará la transcripción de esta clase y generará 3 preguntas clave para evaluar tu aprendizaje.
+                                Gemini analizará el contenido del video y creará 5 preguntas desafiantes para poner a prueba tu conocimiento.
                             </p>
                             <button 
                                 onClick={startQuiz}
-                                disabled={quizLoading}
+                                disabled={quizLoading || (loadingTranscript && !rawTranscript)}
                                 className="px-8 py-3 bg-white text-dark font-bold rounded-xl hover:bg-slate-200 transition-colors flex items-center gap-2 disabled:opacity-50"
                             >
                                 {quizLoading ? <div className="w-5 h-5 border-2 border-dark border-t-transparent rounded-full animate-spin"></div> : <BrainCircuit size={20} />}
-                                {quizLoading ? 'Generando...' : 'Generar Quiz Ahora'}
+                                {quizLoading ? 'Generando Preguntas...' : 'Comenzar Quiz'}
                             </button>
                         </div>
                     ) : (
-                        <div className="max-w-2xl mx-auto pb-8">
+                        <div className="max-w-3xl mx-auto pb-8">
                             {showResults ? (
                                 <div className="text-center py-10 bg-slate-800/50 rounded-2xl border border-slate-700">
                                     <div className="w-20 h-20 mx-auto bg-green-500/20 text-green-400 rounded-full flex items-center justify-center mb-4">
@@ -264,7 +311,7 @@ const VideoModal: React.FC<VideoModalProps> = ({ session, onClose, onMarkComplet
                                         Tu Puntaje: {calculateScore()} / {quizQuestions.length}
                                     </h3>
                                     <p className="text-slate-400 mb-8">
-                                        {calculateScore() === quizQuestions.length ? '¡Excelente! Has dominado este tema.' : 'Buen intento, revisa la transcripción para mejorar.'}
+                                        {calculateScore() >= 4 ? '¡Excelente trabajo! 🚀' : 'Te recomiendo repasar el video y la transcripción.'}
                                     </p>
                                     <button 
                                         onClick={() => {
@@ -282,17 +329,18 @@ const VideoModal: React.FC<VideoModalProps> = ({ session, onClose, onMarkComplet
                                     {quizQuestions.map((q, idx) => (
                                         <div key={idx} className="bg-slate-800/30 p-6 rounded-xl border border-slate-800">
                                             <h4 className="text-lg font-bold text-white mb-4 flex gap-3">
-                                                <span className="text-slate-500">0{idx + 1}.</span> {q.question}
+                                                <span className="text-primary font-mono">0{idx + 1}</span> 
+                                                <span>{q.question}</span>
                                             </h4>
-                                            <div className="space-y-2">
+                                            <div className="space-y-2 ml-8">
                                                 {q.options.map((opt, optIdx) => (
                                                     <button
                                                         key={optIdx}
                                                         onClick={() => handleAnswer(idx, optIdx)}
-                                                        className={`w-full text-left p-4 rounded-lg border transition-all ${
+                                                        className={`w-full text-left p-4 rounded-lg border transition-all text-sm ${
                                                             userAnswers[idx] === optIdx 
                                                             ? 'bg-primary/20 border-primary text-white' 
-                                                            : 'bg-slate-900/50 border-slate-700 text-slate-300 hover:bg-slate-800'
+                                                            : 'bg-slate-900/50 border-slate-700 text-slate-300 hover:bg-slate-800 hover:border-slate-500'
                                                         }`}
                                                     >
                                                         {opt}
@@ -301,7 +349,7 @@ const VideoModal: React.FC<VideoModalProps> = ({ session, onClose, onMarkComplet
                                             </div>
                                         </div>
                                     ))}
-                                    <div className="flex justify-end pt-4">
+                                    <div className="flex justify-end pt-4 border-t border-slate-800">
                                         <button 
                                             onClick={() => setShowResults(true)}
                                             disabled={userAnswers.includes(-1)}

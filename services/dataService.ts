@@ -1,6 +1,8 @@
 import { User } from '../types';
 
+// IMPORTANT: The Apps Script connected to this URL must be updated to handle 'Progreso3'
 const SPREADSHEET_ID = '13rQdIhzb-Ve9GAClQwopVtS9u2CpGTj2aUy528a7YSw';
+// Public Read-Only Key for client-side fetching (Standard practice for public/semi-public sheets)
 const API_KEY = 'AIzaSyCzPHhigfOD6oHw26JftVg3YyKLijwbyY4';
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwxHzlEhCYVZaPSJl4V6ptxcDkefM_SUJbwqpgVB9gZV3SGVbWYB3EGMf6tHP0PfET62w/exec';
 
@@ -10,7 +12,6 @@ export interface VideoMap {
 
 export const fetchAllData = async () => {
   try {
-    // UPDATED: Fetching from sheets ending in '3'
     const [usersRes, skillsRes, progressRes, videosRes] = await Promise.all([
       fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/Usuarios3?key=${API_KEY}`),
       fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/Habilidades3?key=${API_KEY}`),
@@ -57,7 +58,7 @@ const processData = (usersData: any, skillsData: any, progressData: any, videosD
       if (row[0]) {
         progressMap[row[0]] = {
           completed: parseInt(row[5]) || 0,
-          total: 12 // UPDATED: Total classes is now 12
+          total: 12
         };
         
         if (row[7]) {
@@ -92,16 +93,12 @@ const processData = (usersData: any, skillsData: any, progressData: any, videosD
   }
 
   // 4. Process Videos (Videos3)
-  // Assumed Structure: Col B (Week), Col C (Session Number like "1" or "2"), Col D (URL)
   if (videosData.values) {
     videosData.values.slice(1).forEach((row: string[]) => {
       if (row[1] && row[2]) {
         const week = row[1];
-        // Clean session input to ensure it maps to "1" or "2"
         let session = row[2].toString().toLowerCase().replace('clase', '').trim();
         const url = row[3] || '';
-        
-        // Key format: "1-1", "1-2", "2-1", etc.
         videos[`${week}-${session}`] = url;
       }
     });
@@ -114,18 +111,21 @@ export const saveUserProgress = async (user: User, progressJson: Record<string, 
   const completadas = Object.values(progressJson).filter(v => v === true).length;
   const jsonString = JSON.stringify(progressJson);
 
-  console.log("Saving progress to cloud (AFRI)...", { email: user.email, completadas, jsonString });
+  console.log("Saving progress to cloud (AFRI)...", { email: user.email, completadas });
 
   try {
-    // Note: The Apps Script needs to be updated on Google side to write to 'Progreso3'
+    // We use mode: 'no-cors' because Google Apps Script Web Apps don't strictly support CORS preflight
+    // for simple POST requests in this context. 
+    // This means we won't get a readable JSON response in the browser, 
+    // but the request will execute on the server if the payload is correct.
     await fetch(APPS_SCRIPT_URL, {
         method: 'POST',
-        mode: 'no-cors',
+        mode: 'no-cors', 
         headers: {
-            'Content-Type': 'application/json',
+            'Content-Type': 'text/plain;charset=utf-8', // Important for Apps Script compatibility
         },
         body: JSON.stringify({
-            portal: 'afri', // Updated portal identifier
+            portal: 'afri', 
             email: user.email,
             nombre: user.name,
             rol: user.role,
