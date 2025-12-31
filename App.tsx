@@ -59,11 +59,33 @@ const App: React.FC = () => {
     localStorage.removeItem('simpledata_progress');
   };
 
+  const handleUpdateProgress = (count: number, progressJson: Record<string, boolean>) => {
+    if (!user) return;
+
+    // 1. Update Current User State (For Dashboard)
+    const updatedUser = { 
+        ...user, 
+        progress: { 
+            ...user.progress, 
+            completed: count 
+        } 
+    };
+    setUser(updatedUser);
+
+    // 2. Update Users List State (For Students/Team Page)
+    setUsers(prevUsers => 
+        prevUsers.map(u => u.email === user.email ? updatedUser : u)
+    );
+
+    // 3. Update Local Storage for detailed tracking
+    localStorage.setItem('simpledata_progress', JSON.stringify(progressJson));
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-darker flex items-center justify-center text-white flex-col gap-4">
         <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
-        <p className="text-slate-400 animate-pulse">Conectando con SimpleData...</p>
+        <p className="text-slate-400 animate-pulse">Conectando con AFRI...</p>
       </div>
     );
   }
@@ -75,7 +97,10 @@ const App: React.FC = () => {
           <Route path="/login" element={!user ? <Login onLogin={handleLogin} users={users} /> : <Navigate to="/" />} />
           
           <Route path="/" element={user ? <Dashboard user={user} /> : <Navigate to="/login" />} />
-          <Route path="/classes" element={user ? <Classes user={user} videos={videos} /> : <Navigate to="/login" />} />
+          <Route 
+            path="/classes" 
+            element={user ? <Classes user={user} videos={videos} onUpdateProgress={handleUpdateProgress} /> : <Navigate to="/login" />} 
+          />
           <Route path="/students" element={user ? <Students users={users} /> : <Navigate to="/login" />} />
           <Route path="/guide" element={user ? <Guide /> : <Navigate to="/login" />} />
           

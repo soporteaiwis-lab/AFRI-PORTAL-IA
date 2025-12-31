@@ -8,9 +8,10 @@ import { saveUserProgress, VideoMap } from '../services/dataService';
 interface ClassesProps {
   user: User;
   videos: VideoMap;
+  onUpdateProgress: (count: number, progressJson: Record<string, boolean>) => void;
 }
 
-const Classes: React.FC<ClassesProps> = ({ user, videos }) => {
+const Classes: React.FC<ClassesProps> = ({ user, videos, onUpdateProgress }) => {
   const [selectedSession, setSelectedSession] = useState<ClassSession | null>(null);
   const [selectedWeekId, setSelectedWeekId] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState(1); // 1 = Phase 1 (Weeks 1-3), 2 = Phase 2 (Weeks 4-6)
@@ -39,12 +40,19 @@ const Classes: React.FC<ClassesProps> = ({ user, videos }) => {
      };
 
      setLocalProgress(newProgress);
-     localStorage.setItem('simpledata_progress', JSON.stringify(newProgress));
      
+     // Update Modal State if open
      if (selectedSession && selectedSession.id === session.id) {
          setSelectedSession({ ...selectedSession, isCompleted: newStatus });
      }
      
+     // Calculate new count
+     const completadas = Object.values(newProgress).filter(v => v === true).length;
+
+     // 1. Update Global State (App.tsx) -> Updates Dashboard & Students page immediately
+     onUpdateProgress(completadas, newProgress);
+
+     // 2. Persist to Cloud
      await saveUserProgress(user, newProgress);
   };
   
