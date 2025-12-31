@@ -21,7 +21,7 @@ export const generateTutorResponse = async (
 ): Promise<string> => {
     
     if (!ai) {
-        return "⚠️ Configuración Requerida: Para usar el Tutor IA, asegúrate de que la variable de entorno API_KEY esté configurada correctamente en tu proyecto.";
+        return "El servicio de IA no está disponible actualmente.";
     }
 
     try {
@@ -50,7 +50,7 @@ export const generateTutorResponse = async (
 };
 
 export const generateSummaryFromText = async (transcriptText: string): Promise<string> => {
-    if (!ai) return "API Key no configurada.";
+    if (!ai) return "Servicio de IA no disponible.";
 
     try {
         const prompt = `

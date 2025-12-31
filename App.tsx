@@ -29,8 +29,6 @@ const App: React.FC = () => {
     
     if (isInitial) setLoading(false);
 
-    // If a user is logged in, sync their data with the latest from the cloud
-    // This ensures that if they updated on another device, it reflects here
     return fetchedUsers;
   };
 
@@ -39,7 +37,6 @@ const App: React.FC = () => {
     loadData(true);
 
     // 2. "Live" Polling - Check for updates every 10 seconds
-    // This replaces the Firebase socket connection for a simpler Sheets integration
     const interval = setInterval(async () => {
         const fetchedUsers = await loadData(false);
         
@@ -47,27 +44,17 @@ const App: React.FC = () => {
         if (user) {
             const updatedCurrentUser = fetchedUsers.find(u => u.email === user.email);
             if (updatedCurrentUser) {
-                // Only update if there are changes to avoid unnecessary re-renders
-                if (JSON.stringify(updatedCurrentUser.progress) !== JSON.stringify(user.progress)) {
+                // Check deep equality effectively for progress
+                if (JSON.stringify(updatedCurrentUser.progress) !== JSON.stringify(user.progress) || 
+                    JSON.stringify(updatedCurrentUser.progress_details) !== JSON.stringify(user.progress_details)) {
                     setUser(updatedCurrentUser);
                 }
             }
         }
     }, 10000); 
 
-    // Check for persistent login via email key only
-    const storedUserEmail = localStorage.getItem('simpledata_user_email');
-    if (storedUserEmail && !user) {
-         // We wait for the first loadData to finish via the interval or initial load
-         // But we can try to set it if users are already populated
-         if (users.length > 0) {
-             const found = users.find(u => u.email === storedUserEmail);
-             if (found) setUser(found);
-         }
-    }
-
     return () => clearInterval(interval);
-  }, [user?.email]); // Re-create interval if user changes to ensure closure has correct ref
+  }, [user?.email]);
 
   // Late binding for login persistence
   useEffect(() => {
@@ -92,7 +79,7 @@ const App: React.FC = () => {
   const handleUpdateProgress = async (count: number, progressJson: Record<string, boolean>) => {
     if (!user) return;
 
-    // 1. Optimistic Update (Immediate UI feedback)
+    // 1. Create the updated user object
     const updatedUser = { 
         ...user, 
         progress: { 
@@ -102,18 +89,26 @@ const App: React.FC = () => {
         progress_details: progressJson
     };
     
+    // 2. Update Current User State (Dashboard)
     setUser(updatedUser);
+
+    // 3. CRITICAL FIX: Immediately update the 'users' array so 'Students' page sees the change
     setUsers(prevUsers => prevUsers.map(u => u.email === user.email ? updatedUser : u));
 
-    // 2. Persist to Cloud (Google Sheets)
+    // 4. Persist to Cloud (Google Sheets) in background
     await saveUserProgress(updatedUser, progressJson);
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-darker flex items-center justify-center text-white flex-col gap-4">
-        <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
-        <p className="text-slate-400 animate-pulse">Sincronizando con AFRI...</p>
+      <div className="min-h-screen bg-darker flex items-center justify-center text-cobol flex-col gap-4 font-mono">
+        <div className="relative">
+            <div className="w-16 h-16 border-4 border-cobol/30 border-t-cobol rounded-full animate-spin"></div>
+            <div className="absolute inset-0 flex items-center justify-center text-xs animate-pulse">
+                &gt;_
+            </div>
+        </div>
+        <p className="tracking-widest animate-pulse">ESTABLECIENDO ENLACE MAINFRAME...</p>
       </div>
     );
   }

@@ -3,38 +3,90 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AFRI | Portal Adopcion IA</title>
+    <title>AFRI | De COBOL a la IA</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@300;400;600&family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
     <script>
         tailwind.config = {
             theme: {
                 extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['"Fira Code"', 'monospace'],
+                    },
                     colors: {
-                        primary: '#3b82f6',
-                        secondary: '#7c3aed',
-                        dark: '#0f172a',
-                        darker: '#020617',
-                        surface: '#1e293b'
+                        primary: '#3b82f6', // Modern Blue
+                        secondary: '#d946ef', // Neon Fuchsia
+                        cobol: '#4ade80', // Terminal Green
+                        dark: '#050a14', // Deep Space
+                        darker: '#02040a',
+                        surface: '#0f172a',
+                        glass: 'rgba(15, 23, 42, 0.6)'
+                    },
+                    animation: {
+                        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                        'float': 'float 6s ease-in-out infinite',
+                    },
+                    keyframes: {
+                        float: {
+                            '0%, 100%': { transform: 'translateY(0)' },
+                            '50%': { transform: 'translateY(-10px)' },
+                        }
                     }
                 }
             }
         }
     </script>
     <style>
-        /* Custom scrollbar for webkit */
+        /* Custom scrollbar */
         ::-webkit-scrollbar {
             width: 8px;
             height: 8px;
         }
         ::-webkit-scrollbar-track {
-            background: #0f172a; 
+            background: #02040a; 
         }
         ::-webkit-scrollbar-thumb {
-            background: #334155; 
+            background: #1e293b; 
             border-radius: 4px;
+            border: 1px solid #334155;
         }
         ::-webkit-scrollbar-thumb:hover {
-            background: #475569; 
+            background: #4ade80; 
+        }
+
+        /* COBOL Terminal Effect */
+        .scanline {
+            background: linear-gradient(
+                to bottom,
+                rgba(255,255,255,0),
+                rgba(255,255,255,0) 50%,
+                rgba(0,0,0,0.2) 50%,
+                rgba(0,0,0,0.2)
+            );
+            background-size: 100% 4px;
+            pointer-events: none;
+            z-index: 10;
+        }
+        
+        .retro-glow {
+            text-shadow: 0 0 5px rgba(74, 222, 128, 0.5);
+        }
+
+        /* AI Glass Effect */
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        
+        .ai-gradient-text {
+            background: linear-gradient(135deg, #60a5fa 0%, #c084fc 50%, #f472b6 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
         }
     </style>
 <script type="importmap">
@@ -50,7 +102,7 @@
 }
 </script>
 </head>
-<body class="bg-darker text-slate-200 antialiased selection:bg-primary selection:text-white">
+<body class="bg-darker text-slate-200 antialiased selection:bg-cobol selection:text-black font-sans overflow-x-hidden">
     <div id="root"></div>
 </body>
 </html>
