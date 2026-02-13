@@ -8,9 +8,13 @@ export interface VideoMap {
   [key: string]: string; 
 }
 
+// LOCAL STORAGE KEYS
+const LS_PROGRESS_KEY = 'afri_local_progress_backup';
+
 /**
- * Obtiene todos los datos actualizados desde las Hojas de Google.
- * Se añade un parámetro de tiempo para evitar que el navegador use caché vieja.
+ * Obtiene todos los datos. 
+ * ESTRATEGIA: Combina datos de Google Sheets con la copia de seguridad local
+ * para evitar que el retraso de la API borre el progreso del usuario.
  */
 export const fetchAllData = async () => {
   const timestamp = new Date().getTime();
@@ -30,6 +34,7 @@ export const fetchAllData = async () => {
     return processData(usersData, skillsData, progressData, videosData);
   } catch (error) {
     console.error("Error crítico leyendo base de datos:", error);
+    // En caso de error total, intentar recuperar del local storage
     return { users: [], videos: {}, progressJsonMap: {} };
   }
 };
@@ -40,6 +45,13 @@ const processData = (usersData: any, skillsData: any, progressData: any, videosD
   const skillsMap: Record<string, any> = {};
   const progressMap: Record<string, any> = {};
   const progressJsonMap: Record<string, any> = {}; 
+
+  // 1. Load Local Backup to override stale cloud data
+  let localBackup: Record<string, any> = {};
+  try {
+    const stored = localStorage.getItem(LS_PROGRESS_KEY);
+    if (stored) localBackup = JSON.parse(stored);
+  } catch (e) {}
 
   if (skillsData.values) {
     skillsData.values.slice(1).forEach((row: any[]) => {
@@ -55,22 +67,34 @@ const processData = (usersData: any, skillsData: any, progressData: any, videosD
 
   if (progressData.values) {
     progressData.values.slice(1).forEach((row: any[]) => {
-      if (row[0]) {
-        progressMap[row[0]] = {
-          completed: parseInt(row[5]) || 0,
-          total: 12
-        };
+      if (row[0]) { // Email
+        const email = row[0];
         
+        // Intentar parsear JSON de la nube
+        let cloudDetails = {};
         if (row[7]) {
            try {
              const rawJson = row[7].toString().trim();
              if (rawJson.startsWith('{')) {
-                progressJsonMap[row[0]] = JSON.parse(rawJson);
+                cloudDetails = JSON.parse(rawJson);
              }
-           } catch (e) {
-             console.warn("Error parseando progreso de:", row[0]);
-           }
+           } catch (e) { console.warn("Error JSON Cloud", e); }
         }
+
+        // MERGE INTELLIGENT: 
+        // Si tenemos un backup local para este email, mezclamos. 
+        // Priorizamos 'true' (visto) sobre 'false' (no visto) para evitar reversiones.
+        const localDetails = localBackup[email] || {};
+        const mergedDetails = { ...cloudDetails, ...localDetails };
+        
+        // Calcular completadas reales basadas en el merge
+        const completedCount = Object.values(mergedDetails).filter(v => v === true).length;
+
+        progressMap[email] = {
+          completed: completedCount,
+          total: 12
+        };
+        progressJsonMap[email] = mergedDetails;
       }
     });
   }
@@ -85,6 +109,8 @@ const processData = (usersData: any, skillsData: any, progressData: any, videosD
           name: row[1],
           role: row[2] || 'Estudiante',
           avatar: row[1].charAt(0).toUpperCase(),
+          // Assume column 4 (index 3) is password, default to '1234'
+          password: row[3] ? row[3].toString() : '1234', 
           stats: skillsMap[email] || { prompting: 0, tools: 0, analysis: 0 },
           progress: progressMap[email] || { completed: 0, total: 12 },
           progress_details: progressJsonMap[email] || {}
@@ -106,15 +132,23 @@ const processData = (usersData: any, skillsData: any, progressData: any, videosD
 };
 
 /**
- * Guarda el progreso en la nube. 
- * IMPORTANTE: Usamos 'text/plain' para evitar preflight CORS errors.
+ * Guarda el progreso en la nube Y en local storage.
  */
 export const saveUserProgress = async (user: User, progressJson: Record<string, boolean>) => {
   const completadas = Object.values(progressJson).filter(v => v === true).length;
   const jsonString = JSON.stringify(progressJson);
 
-  // Payload structure matching Apps Script expectations
+  // 1. SAVE LOCAL BACKUP IMMEDIATELY
+  try {
+      const stored = localStorage.getItem(LS_PROGRESS_KEY);
+      const backup = stored ? JSON.parse(stored) : {};
+      backup[user.email] = progressJson;
+      localStorage.setItem(LS_PROGRESS_KEY, JSON.stringify(backup));
+  } catch (e) { console.error("Local Backup Failed", e); }
+
+  // 2. SEND TO CLOUD
   const payload = {
+    action: 'updateProgress',
     email: user.email,
     nombre: user.name,
     rol: user.role,
@@ -123,20 +157,41 @@ export const saveUserProgress = async (user: User, progressJson: Record<string, 
   };
 
   try {
-    // Usamos mode: 'no-cors' y Content-Type: 'text/plain'
-    // Esto es crucial para que el navegador permita el envío a scripts de Google.
     await fetch(APPS_SCRIPT_URL, {
         method: 'POST',
         mode: 'no-cors', 
-        headers: { 
-            'Content-Type': 'text/plain;charset=utf-8' 
-        },
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify(payload)
     });
-    console.log("Datos enviados al servidor correctamente.");
     return true;
   } catch (error) {
     console.error("Error guardando en la nube:", error);
     return false;
   }
+};
+
+/**
+ * Función ADMINISTRATIVA para que Armin edite datos directamente en Sheets.
+ */
+export const adminUpdateCell = async (sheetName: string, key: string, column: number, value: any) => {
+    const payload = {
+        action: 'adminUpdate',
+        sheetName,
+        key,
+        column, // 1-based index
+        value
+    };
+
+    try {
+        await fetch(APPS_SCRIPT_URL, {
+            method: 'POST',
+            mode: 'no-cors',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify(payload)
+        });
+        return true;
+    } catch (e) {
+        console.error("Admin update failed", e);
+        return false;
+    }
 };

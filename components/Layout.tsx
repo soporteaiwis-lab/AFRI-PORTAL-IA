@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { Home, BookOpen, Users, FileText, LogOut, Terminal, Cpu } from 'lucide-react';
+import { Home, BookOpen, Users, FileText, LogOut, Terminal, Cpu, Database } from 'lucide-react';
 import { User } from '../types';
 import AITutor from './AITutor';
 
@@ -13,12 +13,18 @@ interface LayoutProps {
 const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
   if (!user) return <>{children}</>;
 
+  const isMaster = user.role.toLowerCase().includes('master') || user.email.includes('armin');
+
   const navItems = [
     { to: '/', icon: Home, label: 'CMD_DASHBOARD' },
     { to: '/classes', icon: BookOpen, label: 'EXEC_CLASSES' },
     { to: '/students', icon: Users, label: 'LIST_TEAM' },
     { to: '/guide', icon: FileText, label: 'READ_MANUAL' },
   ];
+
+  if (isMaster) {
+      navItems.push({ to: '/admin', icon: Database, label: 'ROOT_ACCESS' });
+  }
 
   return (
     <div className="min-h-screen bg-darker flex text-slate-200 overflow-hidden relative">
@@ -28,7 +34,7 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
           <div className="absolute bottom-[-10%] left-[-10%] w-[500px] h-[500px] bg-cobol/5 rounded-full blur-[100px]"></div>
       </div>
 
-      {/* Sidebar Desktop - The "Mainframe" */}
+      {/* Sidebar Desktop */}
       <aside className="hidden lg:flex flex-col w-72 bg-black border-r border-cobol/20 h-screen sticky top-0 z-20 shadow-[0_0_20px_rgba(74,222,128,0.05)] font-mono">
         <div className="p-6 border-b border-cobol/20 bg-darker/50 backdrop-blur">
           <div className="flex items-center gap-3">
@@ -37,7 +43,7 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
              </div>
              <div>
                 <h1 className="font-bold text-cobol tracking-widest text-lg retro-glow">AFRI_SYS</h1>
-                <p className="text-[10px] text-slate-500 uppercase">v2.0.25 [COBOL_CORE]</p>
+                <p className="text-[10px] text-slate-500 uppercase">v3.0.PRO [MASTER_READY]</p>
              </div>
           </div>
         </div>
@@ -57,7 +63,6 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
             >
               <item.icon size={18} />
               <span className="text-sm tracking-wider">{item.label}</span>
-              {/* Hover glitch effect line */}
               <div className="absolute inset-0 bg-cobol/5 translate-x-[-100%] group-hover:translate-x-0 transition-transform duration-300"></div>
             </NavLink>
           ))}
@@ -70,7 +75,7 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
               </div>
               <div className="flex-1 min-w-0">
                  <p className="text-xs font-bold text-cobol truncate">USR: {user.name.toUpperCase()}</p>
-                 <p className="text-[10px] text-slate-500 truncate">STATUS: ONLINE</p>
+                 <p className="text-[10px] text-slate-500 truncate">{isMaster ? 'ADMINISTRADOR' : 'ESTUDIANTE'}</p>
               </div>
            </div>
            <button 
@@ -82,7 +87,7 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
         </div>
       </aside>
 
-      {/* Main Content - The "Cloud/AI Future" */}
+      {/* Main Content */}
       <main className="flex-1 flex flex-col min-w-0 pb-20 lg:pb-0 relative z-10">
          {/* Mobile Header */}
          <div className="lg:hidden bg-black/80 backdrop-blur-md sticky top-0 z-30 border-b border-cobol/20 px-4 py-3 flex justify-between items-center font-mono">
@@ -96,11 +101,10 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
          </div>
 
          <div className="flex-1 overflow-y-auto relative">
-            {/* AI Decorator Top Right */}
             <div className="absolute top-0 right-0 p-4 opacity-50 pointer-events-none hidden md:block">
                 <div className="flex items-center gap-2 text-xs text-primary/60 font-mono">
                     <Cpu size={14} className="animate-spin-slow" />
-                    <span>AI_PROCESSOR: ACTIVE</span>
+                    <span>AI_PROCESSOR: {isMaster ? 'MASTER_MODE' : 'ACTIVE'}</span>
                 </div>
             </div>
 
@@ -124,7 +128,7 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
               }
             >
               <item.icon size={20} />
-              <span className="text-[10px] font-bold">{item.label.split('_')[1]}</span>
+              <span className="text-[10px] font-bold">{item.label.split('_')[1] || item.label}</span>
             </NavLink>
           ))}
         </div>

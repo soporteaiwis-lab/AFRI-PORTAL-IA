@@ -4,6 +4,7 @@ export interface User {
   name: string;
   role: string;
   avatar: string;
+  password?: string; // New field for auth
   stats: {
     prompting: number;
     tools: number;
@@ -13,7 +14,6 @@ export interface User {
     completed: number;
     total: number;
   };
-  // Add this field to track individual classes status in DB
   progress_details?: Record<string, boolean>; 
 }
 
@@ -24,6 +24,7 @@ export interface ClassSession {
   description: string;
   date?: string; // Optional date string (e.g., "12 Oct")
   videoUrl?: string; // YouTube ID or URL
+  meetLink?: string; // New: Google Meet recording link
   isCompleted: boolean;
   transcript?: string;
   resources?: {
