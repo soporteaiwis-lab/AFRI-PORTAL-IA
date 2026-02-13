@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, PlayCircle, FileText, CheckCircle, AlignLeft, BrainCircuit, RotateCcw, Award, Sparkles, FileType } from 'lucide-react';
+import { X, PlayCircle, FileText, CheckCircle, AlignLeft, BrainCircuit, RotateCcw, Award, Sparkles, FileType, Cloud, RefreshCw } from 'lucide-react';
 import { ClassSession } from '../types';
 import { generateQuizFromText, generateSummaryFromText, QuizQuestion } from '../services/geminiService';
 
@@ -15,6 +15,7 @@ const VideoModal: React.FC<VideoModalProps> = ({ session, onClose, onMarkComplet
   const [transcriptHtml, setTranscriptHtml] = useState<string>('');
   const [rawTranscript, setRawTranscript] = useState<string>('');
   const [loadingTranscript, setLoadingTranscript] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
   
   // AI State
   const [summary, setSummary] = useState<string>('');
@@ -36,8 +37,17 @@ const VideoModal: React.FC<VideoModalProps> = ({ session, onClose, onMarkComplet
         setSummary('');
         setRawTranscript('');
         setTranscriptHtml('');
+        setIsSyncing(false);
     }
   }, [session]);
+
+  const handleMarkClick = async () => {
+      if (!session) return;
+      setIsSyncing(true);
+      await onMarkComplete(session.id);
+      // Fake a small delay to show the user "Data is saved" assurance
+      setTimeout(() => setIsSyncing(false), 1000);
+  };
 
   // Load Transcript automatically if needed for AI tabs
   useEffect(() => {
@@ -208,16 +218,32 @@ const VideoModal: React.FC<VideoModalProps> = ({ session, onClose, onMarkComplet
                     
                     <div className="flex flex-wrap gap-4 pt-6 border-t border-slate-700 mt-8">
                         <button 
-                            onClick={() => onMarkComplete(session.id)}
+                            onClick={handleMarkClick}
+                            disabled={isSyncing}
                             className={`flex items-center gap-3 px-6 py-4 rounded-xl transition-all font-bold shadow-lg w-full md:w-auto justify-center ${
                                 session.isCompleted 
                                 ? 'bg-green-500/10 text-green-400 border border-green-500/50 hover:bg-green-500/20' 
                                 : 'bg-gradient-to-r from-primary to-blue-600 hover:from-blue-600 hover:to-primary text-white'
                             }`}
                         >
-                            <CheckCircle size={20} /> 
-                            {session.isCompleted ? 'Clase Completada' : 'Marcar como Vista'}
+                            {isSyncing ? (
+                                <RefreshCw size={20} className="animate-spin" />
+                            ) : session.isCompleted ? (
+                                <CheckCircle size={20} /> 
+                            ) : (
+                                <Cloud size={20} />
+                            )}
+                            
+                            {isSyncing 
+                                ? 'Sincronizando...' 
+                                : session.isCompleted ? 'Clase Completada' : 'Marcar como Vista'}
                         </button>
+                        
+                        {isSyncing && (
+                            <span className="text-xs text-slate-500 flex items-center gap-1 animate-pulse">
+                                <Cloud size={12} /> Guardando en Base de Datos Google...
+                            </span>
+                        )}
                     </div>
                 </div>
             )}
