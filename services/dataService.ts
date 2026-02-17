@@ -4,13 +4,18 @@ import { collection, getDocs, doc, setDoc, updateDoc, getDoc, writeBatch } from 
 import { User, WeekData, ClassSession } from '../types';
 import { COURSE_CONTENT } from '../constants';
 
-// --- DATA SERVICE: GOOGLE CLOUD FIRESTORE ---
-// Este servicio ahora ignora la memoria caché y lee directamente de la nube.
+// --- DATA SERVICE: DUAL ENGINE (CLOUD + LOCAL FAILOVER) ---
+// 1. Intenta conectar a Google Cloud Firestore (Nube).
+// 2. Si fallan las credenciales o la red, usa almacenamiento local silencioso para no detener el uso.
 
 const USERS_COLLECTION = 'users';
 const CONTENT_COLLECTION = 'content';
+const LOCAL_KEYS = {
+    USERS: 'afri_sys_users_backup',
+    CONTENT: 'afri_sys_content_backup'
+};
 
-// SEMILLA INICIAL (Solo si la nube está vacía)
+// --- DATA SEEDING (SEMILLA INICIAL) ---
 const ROOT_ADMIN: User = {
     id: 'root-admin',
     email: 'armin@aiwis.cl',
@@ -23,133 +28,215 @@ const ROOT_ADMIN: User = {
     progress_details: {}
 };
 
+// --- INTERNAL HELPERS (FAILOVER SYSTEM) ---
+const _localLoadUsers = (): User[] => {
+    try {
+        const data = localStorage.getItem(LOCAL_KEYS.USERS);
+        return data ? JSON.parse(data) : [ROOT_ADMIN];
+    } catch { return [ROOT_ADMIN]; }
+};
+
+const _localSaveUsers = (users: User[]) => {
+    localStorage.setItem(LOCAL_KEYS.USERS, JSON.stringify(users));
+};
+
+const _localLoadContent = (): WeekData[] => {
+    try {
+        const data = localStorage.getItem(LOCAL_KEYS.CONTENT);
+        if (!data) return COURSE_CONTENT;
+        // Merge logic simplificada
+        return JSON.parse(data);
+    } catch { return COURSE_CONTENT; }
+};
+
+const _localSaveContent = (content: WeekData[]) => {
+    localStorage.setItem(LOCAL_KEYS.CONTENT, JSON.stringify(content));
+};
+
 // ==========================================
-// CLOUD SERVICES (FIRESTORE)
+// PUBLIC API SERVICES
 // ==========================================
 
 export const seedDatabaseIfEmpty = async () => {
-    if (!isConfigured || !db) return;
-
-    try {
-        const usersSnap = await getDocs(collection(db, USERS_COLLECTION));
-        
-        // Si no hay usuarios, creamos el Admin y el Contenido Base
-        if (usersSnap.empty) {
-            console.log("⚡ [CLOUD] Inicializando base de datos vacía...");
-            const batch = writeBatch(db);
-
-            // 1. Crear Admin
-            const adminRef = doc(db, USERS_COLLECTION, ROOT_ADMIN.email);
-            batch.set(adminRef, ROOT_ADMIN);
-
-            // 2. Crear Contenido
-            // Guardamos cada semana como un documento separado para mejor escalabilidad
-            COURSE_CONTENT.forEach(week => {
-                const weekRef = doc(db, CONTENT_COLLECTION, `week-${week.id}`);
-                batch.set(weekRef, week);
-            });
-
-            await batch.commit();
-            console.log("✅ [CLOUD] Datos semilla creados exitosamente.");
+    // Intento Cloud
+    if (isConfigured && db) {
+        try {
+            const usersSnap = await getDocs(collection(db, USERS_COLLECTION));
+            if (usersSnap.empty) {
+                console.log("⚡ [CLOUD] Inicializando base de datos vacía...");
+                const batch = writeBatch(db);
+                const adminRef = doc(db, USERS_COLLECTION, ROOT_ADMIN.email);
+                batch.set(adminRef, ROOT_ADMIN);
+                COURSE_CONTENT.forEach(week => {
+                    const weekRef = doc(db, CONTENT_COLLECTION, `week-${week.id}`);
+                    batch.set(weekRef, week);
+                });
+                await batch.commit();
+            }
+            return;
+        } catch (e) {
+            console.warn("⚠️ [CLOUD] Fallo en seed, usando local.", e);
         }
-    } catch (e) {
-        console.error("❌ [CLOUD] Error al inicializar DB:", e);
+    }
+    // Fallback Local
+    if (!localStorage.getItem(LOCAL_KEYS.USERS)) {
+        _localSaveUsers([ROOT_ADMIN]);
     }
 };
 
 export const getUsers = async (): Promise<User[]> => {
-    if (!isConfigured || !db) return [ROOT_ADMIN]; // Fallback solo si no hay config
-    
-    try {
-        const snapshot = await getDocs(collection(db, USERS_COLLECTION));
-        return snapshot.docs.map(doc => doc.data() as User);
-    } catch (error) {
-        console.error("Error obteniendo usuarios:", error);
-        return [];
+    // 1. Intentar Cloud
+    if (isConfigured && db) {
+        try {
+            const snapshot = await getDocs(collection(db, USERS_COLLECTION));
+            if (!snapshot.empty) {
+                return snapshot.docs.map(doc => doc.data() as User);
+            }
+        } catch (e) {
+            console.error("Cloud Error (getUsers):", e);
+        }
     }
+    // 2. Fallback Local
+    return _localLoadUsers();
 };
 
 export const getContent = async (): Promise<WeekData[]> => {
-    if (!isConfigured || !db) return COURSE_CONTENT;
-
-    try {
-        const snapshot = await getDocs(collection(db, CONTENT_COLLECTION));
-        if (snapshot.empty) return COURSE_CONTENT;
-        
-        // Ordenar por ID de semana
-        const data = snapshot.docs.map(doc => doc.data() as WeekData);
-        return data.sort((a, b) => a.id - b.id);
-    } catch (error) {
-        console.error("Error obteniendo contenido:", error);
-        return COURSE_CONTENT;
+    if (isConfigured && db) {
+        try {
+            const snapshot = await getDocs(collection(db, CONTENT_COLLECTION));
+            if (!snapshot.empty) {
+                const data = snapshot.docs.map(doc => doc.data() as WeekData);
+                return data.sort((a, b) => a.id - b.id);
+            }
+        } catch (e) {
+            console.error("Cloud Error (getContent):", e);
+        }
     }
+    return _localLoadContent();
 };
 
 export const createUser = async (user: User) => {
-    if (!isConfigured || !db) throw new Error("No hay conexión a la nube");
-    await setDoc(doc(db, USERS_COLLECTION, user.email), user);
+    // 1. Cloud
+    if (isConfigured && db) {
+        try {
+            await setDoc(doc(db, USERS_COLLECTION, user.email), user);
+            return; // Éxito en nube
+        } catch (e) {
+            console.error("Cloud Create Error:", e);
+            // Si falla nube, seguimos a local para no bloquear al usuario
+        }
+    }
+    
+    // 2. Local
+    const users = _localLoadUsers();
+    if (users.find(u => u.email === user.email)) throw new Error("Usuario ya existe (Local DB)");
+    users.push(user);
+    _localSaveUsers(users);
 };
 
 export const updateUser = async (user: User) => {
-    if (!isConfigured || !db) throw new Error("No hay conexión a la nube");
-    await setDoc(doc(db, USERS_COLLECTION, user.email), user, { merge: true });
-};
-
-export const deleteUser = async (email: string) => {
-    if (!isConfigured || !db) throw new Error("No hay conexión a la nube");
-    // Nota: Firestore client SDK no tiene deleteDoc directo en import simple a veces, 
-    // pero setDoc con merge false o deleteDoc standard funciona.
-    // Usamos una actualización lógica o delete directo si importado.
-    // Como no importé deleteDoc arriba, lo agrego ahora o uso un workaround.
-    // Mejor importo deleteDoc arriba (se asume agregado en imports).
-    const { deleteDoc } = await import('firebase/firestore');
-    await deleteDoc(doc(db, USERS_COLLECTION, email));
-};
-
-export const updateSession = async (session: ClassSession) => {
-    if (!isConfigured || !db) return false;
-
-    try {
-        // En Firestore, la sesión está dentro de un documento "Week".
-        // Necesitamos leer la semana, modificar la sesión y guardar la semana.
-        const weekRef = doc(db, CONTENT_COLLECTION, `week-${session.weekId}`);
-        const weekSnap = await getDoc(weekRef);
-        
-        if (weekSnap.exists()) {
-            const weekData = weekSnap.data() as WeekData;
-            const sessionIndex = weekData.sessions.findIndex(s => s.id === session.id);
-            
-            if (sessionIndex !== -1) {
-                // Asegurar campos limpios
-                const safeSession = {
-                    ...session,
-                    videoUrl: session.videoUrl || '',
-                    transcript: session.transcript || '',
-                    description: session.description || '',
-                    quiz: session.quiz || [],
-                    date: session.date || 'Por definir'
-                };
-
-                weekData.sessions[sessionIndex] = safeSession;
-                await setDoc(weekRef, weekData);
-                return true;
-            }
+    // 1. Cloud
+    if (isConfigured && db) {
+        try {
+            await setDoc(doc(db, USERS_COLLECTION, user.email), user, { merge: true });
+            return;
+        } catch (e) {
+             console.error("Cloud Update Error:", e);
         }
-        return false;
-    } catch (e) {
-        console.error("Error updating session:", e);
-        return false;
+    }
+
+    // 2. Local
+    const users = _localLoadUsers();
+    const idx = users.findIndex(u => u.email === user.email);
+    if (idx !== -1) {
+        users[idx] = user;
+        _localSaveUsers(users);
     }
 };
 
-export const saveUserProgress = async (user: User, progressJson: Record<string, boolean>) => {
-    if (!isConfigured || !db) return;
+export const deleteUser = async (email: string) => {
+    // 1. Cloud
+    if (isConfigured && db) {
+        try {
+            const { deleteDoc } = await import('firebase/firestore');
+            await deleteDoc(doc(db, USERS_COLLECTION, email));
+            return;
+        } catch (e) {
+             console.error("Cloud Delete Error:", e);
+        }
+    }
 
+    // 2. Local
+    const users = _localLoadUsers().filter(u => u.email !== email);
+    _localSaveUsers(users);
+};
+
+export const updateSession = async (session: ClassSession) => {
+    let success = false;
+
+    // 1. Cloud
+    if (isConfigured && db) {
+        try {
+            const weekRef = doc(db, CONTENT_COLLECTION, `week-${session.weekId}`);
+            const weekSnap = await getDoc(weekRef);
+            
+            if (weekSnap.exists()) {
+                const weekData = weekSnap.data() as WeekData;
+                const sessionIndex = weekData.sessions.findIndex(s => s.id === session.id);
+                
+                if (sessionIndex !== -1) {
+                    weekData.sessions[sessionIndex] = {
+                         ...session,
+                         videoUrl: session.videoUrl || '', // Asegurar string
+                         transcript: session.transcript || ''
+                    };
+                    await setDoc(weekRef, weekData);
+                    success = true;
+                }
+            }
+        } catch (e) {
+            console.error("Cloud Session Update Error:", e);
+        }
+    }
+
+    if (success) return true;
+
+    // 2. Local Fallback
+    const content = _localLoadContent();
+    const week = content.find(w => w.id === session.weekId);
+    if (week) {
+        const sIdx = week.sessions.findIndex(s => s.id === session.id);
+        if (sIdx !== -1) {
+            week.sessions[sIdx] = session;
+            _localSaveContent(content);
+            return true;
+        }
+    }
+    return false;
+};
+
+export const saveUserProgress = async (user: User, progressJson: Record<string, boolean>) => {
+    // 1. Cloud
+    if (isConfigured && db) {
+        try {
+            const count = Object.values(progressJson).filter(v => v).length;
+            const userRef = doc(db, USERS_COLLECTION, user.email);
+            await updateDoc(userRef, {
+                "progress.completed": count,
+                "progress_details": progressJson
+            });
+            return;
+        } catch (e) {
+            console.error("Progress Save Cloud Error", e);
+        }
+    }
+
+    // 2. Local
     const count = Object.values(progressJson).filter(v => v).length;
-    const userRef = doc(db, USERS_COLLECTION, user.email);
-    
-    await updateDoc(userRef, {
-        "progress.completed": count,
-        "progress_details": progressJson
-    });
+    const updatedUser = { 
+        ...user, 
+        progress: { ...user.progress, completed: count },
+        progress_details: progressJson
+    };
+    updateUser(updatedUser);
 };

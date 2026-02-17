@@ -4,17 +4,16 @@
 export const getVideoEmbedUrl = (url: string): string | null => {
     if (!url) return null;
 
-    // LIMPIEZA DE URL (Eliminar espacios accidentales)
+    // LIMPIEZA DE URL
     const cleanUrl = url.trim();
 
     // 1. Google Drive / Google Meet Recordings
-    // Input: https://drive.google.com/file/d/1gAq976yfrUZFF8pDbc_DsMtOe3Bj4rxM/view...
-    // Output: https://drive.google.com/file/d/1gAq976yfrUZFF8pDbc_DsMtOe3Bj4rxM/preview
-    if (cleanUrl.includes('drive.google.com')) {
-        // La magia ocurre aquí: Reemplazamos /view por /preview para que sea "embeddable"
-        return cleanUrl
-            .replace(/\/view(\?.*)?$/, '/preview')
-            .replace(/\/edit(\?.*)?$/, '/preview');
+    // Input: https://drive.google.com/file/d/ID_ARCHIVO/view...
+    // Output: https://drive.google.com/file/d/ID_ARCHIVO/preview
+    // Esta regex captura el ID y reconstruye la URL para evitar errores de redirección
+    const driveMatch = cleanUrl.match(/drive\.google\.com\/file\/d\/([-a-zA-Z0-9_]+)/);
+    if (driveMatch && driveMatch[1]) {
+        return `https://drive.google.com/file/d/${driveMatch[1]}/preview`;
     }
 
     // 2. YouTube (Varios formatos)
@@ -35,7 +34,7 @@ export const getVideoEmbedUrl = (url: string): string | null => {
         }
     }
 
-    // Retorno por defecto para archivos directos (.mp4)
+    // Retorno por defecto
     return cleanUrl;
 };
 
