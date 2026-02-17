@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { User } from '../types';
 import { ChevronRight, Users as UsersIcon, Lock, AlertCircle, Database, ShieldCheck } from 'lucide-react';
@@ -9,7 +10,7 @@ interface LoginProps {
 
 const Login: React.FC<LoginProps> = ({ onLogin, users }) => {
   const [loading, setLoading] = useState(false);
-  const [identifier, setIdentifier] = useState(''); // Changed from email to identifier
+  const [identifier, setIdentifier] = useState(''); 
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
 
@@ -20,19 +21,46 @@ const Login: React.FC<LoginProps> = ({ onLogin, users }) => {
   };
 
   const performLogin = (idVal: string, passVal: string) => {
-    // Buscar por Email O por Nombre
+    const cleanId = idVal.toLowerCase().trim();
+
+    // --- LOGICA DE ACCESO MASTER DE EMERGENCIA ---
+    // Esto permite entrar incluso si Firebase no está conectado o la DB está vacía.
+    if (cleanId === 'armin@aiwis.cl' || cleanId.includes('armin')) {
+        setLoading(true);
+        
+        // Creamos el usuario Master en memoria "al vuelo"
+        const masterUser: User = {
+            id: 'root-master-emergency',
+            email: 'armin@aiwis.cl',
+            name: 'Armin W Salazar',
+            role: 'Master Root',
+            avatar: 'A',
+            password: '1234',
+            stats: { prompting: 100, tools: 100, analysis: 100 },
+            progress: { completed: 0, total: 12 },
+            progress_details: {}
+        };
+
+        // Bypass de contraseña solicitado (entra directo o con cualquier pass)
+        setTimeout(() => {
+            onLogin(masterUser);
+        }, 500);
+        return;
+    }
+    // ---------------------------------------------
+
+    // Lógica normal para estudiantes (busca en la lista descargada de Firebase)
     const user = users.find(u => 
-        u.email.toLowerCase() === idVal.toLowerCase().trim() || 
-        u.name.toLowerCase() === idVal.toLowerCase().trim()
+        u.email.toLowerCase() === cleanId || 
+        u.name.toLowerCase() === cleanId
     );
     
     if (!user) {
-        setError('Usuario no encontrado en la base de datos (Verifica Nombre o Correo).');
+        setError('Usuario no encontrado. Si eres administrador, usa tu correo root.');
         setLoading(false);
         return;
     }
 
-    // Default password check if column is empty in sheet
     const validPass = user.password || '1234';
 
     if (passVal !== validPass) {
@@ -49,11 +77,8 @@ const Login: React.FC<LoginProps> = ({ onLogin, users }) => {
 
   const handleMasterAutoFill = () => {
       const masterEmail = "armin@aiwis.cl";
-      const masterPass = "1234";
       setIdentifier(masterEmail);
-      setPassword(masterPass);
-      // Opcional: Auto-submit inmediato
-      // performLogin(masterEmail, masterPass);
+      setPassword(""); // Dejamos vacío o ponemos cualquier cosa, ya no valida pass para Armin
   };
 
   return (
@@ -80,7 +105,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, users }) => {
                     type="text" 
                     value={identifier}
                     onChange={(e) => setIdentifier(e.target.value)}
-                    placeholder="Correo O Nombre (ej: Armin...)"
+                    placeholder="Correo (armin@aiwis.cl)"
                     className="w-full bg-slate-900 border border-slate-700 rounded-xl pl-12 pr-4 py-4 text-white focus:outline-none focus:border-primary transition-colors"
                     required
                   />
@@ -91,9 +116,8 @@ const Login: React.FC<LoginProps> = ({ onLogin, users }) => {
                     type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Contraseña"
+                    placeholder="Contraseña (Opcional para Root)"
                     className="w-full bg-slate-900 border border-slate-700 rounded-xl pl-12 pr-4 py-4 text-white focus:outline-none focus:border-primary transition-colors"
-                    required
                   />
               </div>
           </div>
@@ -114,7 +138,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, users }) => {
                 <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
              ) : (
                 <>
-                    <span>Iniciar Sesión</span>
+                    <span>Entrar al Sistema</span>
                     <ChevronRight size={20} />
                 </>
              )}
@@ -127,12 +151,8 @@ const Login: React.FC<LoginProps> = ({ onLogin, users }) => {
                 className="text-xs text-cobol hover:text-white transition-colors flex items-center justify-center gap-2 mx-auto border border-cobol/20 px-3 py-1.5 rounded-full hover:bg-cobol/10"
             >
                 <ShieldCheck size={12} />
-                🔐 Acceso Master Root (Armin)
+                🔐 Autocompletar Root
             </button>
-
-            <p className="text-xs text-slate-500">
-                ¿Olvidaste tu contraseña? Contacta a <span className="text-primary cursor-pointer hover:underline">Soporte Armin</span>
-            </p>
         </div>
       </div>
     </div>

@@ -2,76 +2,74 @@
 import { db } from '../firebaseConfig';
 import { User, ClassSession, WeekData } from '../types';
 import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc, query, orderBy, getDoc } from 'firebase/firestore';
-import { COURSE_CONTENT } from '../constants'; // Usado para semilla inicial
+import { COURSE_CONTENT } from '../constants';
 
 // Colecciones
 const USERS_COL = 'users';
-const CONTENT_COL = 'content'; // Guardaremos las sesiones aquí
+const CONTENT_COL = 'content';
 
-/**
- * Inicializa la base de datos con datos por defecto si está vacía.
- * Esto asegura que al conectar Firebase por primera vez, no esté todo en blanco.
- */
+// USUARIO DE RESPALDO (FALLBACK)
+const FALLBACK_ADMIN: User = {
+    id: 'admin-root-fallback',
+    email: 'armin@aiwis.cl',
+    name: 'Armin W Salazar',
+    role: 'Master Root',
+    avatar: 'A',
+    password: '1234',
+    stats: { prompting: 100, tools: 100, analysis: 100 },
+    progress: { completed: 0, total: 12 },
+    progress_details: {}
+};
+
 export const seedDatabaseIfEmpty = async () => {
     if (!db) return;
 
-    const usersSnap = await getDocs(collection(db, USERS_COL));
-    if (usersSnap.empty) {
-        console.log("Sembrando base de datos inicial...");
-        
-        // 1. Crear Usuario Admin
-        const adminUser: User = {
-            id: 'admin-root',
-            email: 'armin@aiwis.cl',
-            name: 'Armin W Salazar',
-            role: 'Master Root',
-            avatar: 'A',
-            password: '1234',
-            stats: { prompting: 100, tools: 100, analysis: 100 },
-            progress: { completed: 0, total: 12 },
-            progress_details: {}
-        };
-        await setDoc(doc(db, USERS_COL, adminUser.email), adminUser);
+    try {
+        const usersSnap = await getDocs(collection(db, USERS_COL));
+        if (usersSnap.empty) {
+            console.log("Sembrando base de datos inicial...");
+            await setDoc(doc(db, USERS_COL, FALLBACK_ADMIN.email), FALLBACK_ADMIN);
 
-        // 2. Crear Contenido (Flattened sessions)
-        for (const week of COURSE_CONTENT) {
-            for (const session of week.sessions) {
-                const sessionData: ClassSession = {
-                    ...session,
-                    weekId: week.id,
-                    // Aseguramos campos opcionales
-                    videoUrl: session.videoUrl || '',
-                    transcript: session.transcript || '',
-                    description: session.description || ''
-                };
-                // ID compuesto para fácil acceso: w1-s1
-                const docId = `w${week.id}-s${session.sessionNumber}`;
-                await setDoc(doc(db, CONTENT_COL, docId), sessionData);
+            for (const week of COURSE_CONTENT) {
+                for (const session of week.sessions) {
+                    const sessionData: ClassSession = {
+                        ...session,
+                        weekId: week.id,
+                        videoUrl: session.videoUrl || '',
+                        transcript: session.transcript || '',
+                        description: session.description || ''
+                    };
+                    const docId = `w${week.id}-s${session.sessionNumber}`;
+                    await setDoc(doc(db, CONTENT_COL, docId), sessionData);
+                }
             }
+            console.log("Base de datos sembrada.");
         }
-        console.log("Base de datos sembrada.");
+    } catch (e) {
+        console.error("Error sembrando DB:", e);
     }
 };
 
-/**
- * Obtiene usuarios desde Firestore
- */
 export const getUsers = async (): Promise<User[]> => {
-    if (!db) return []; // Fallback empty
+    // Si no hay DB (clave API faltante), devolvemos Admin local para que el login funcione
+    if (!db) return [FALLBACK_ADMIN]; 
+
     try {
         const snapshot = await getDocs(collection(db, USERS_COL));
+        if (snapshot.empty) {
+            // Si la colección existe pero está vacía, devolvemos el fallback para permitir login inicial
+            return [FALLBACK_ADMIN];
+        }
         return snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as User));
     } catch (e) {
-        console.error("Error obteniendo usuarios:", e);
-        return [];
+        console.error("Error obteniendo usuarios, usando fallback:", e);
+        // En caso de error de red o permisos, permitir acceso local al Admin
+        return [FALLBACK_ADMIN];
     }
 };
 
-/**
- * Obtiene el contenido (Clases) desde Firestore y lo estructura en Semanas
- */
 export const getContent = async (): Promise<WeekData[]> => {
-    if (!db) return COURSE_CONTENT; // Fallback to constants if no DB
+    if (!db) return COURSE_CONTENT; 
     try {
         const snapshot = await getDocs(query(collection(db, CONTENT_COL), orderBy('weekId'), orderBy('sessionNumber')));
         
@@ -79,14 +77,13 @@ export const getContent = async (): Promise<WeekData[]> => {
 
         const sessions = snapshot.docs.map(doc => doc.data() as ClassSession);
         
-        // Reconstruir estructura de semanas
         const weeksMap = new Map<number, WeekData>();
         
         sessions.forEach(session => {
             if (!weeksMap.has(session.weekId)) {
                 weeksMap.set(session.weekId, {
                     id: session.weekId,
-                    title: getWeekTitle(session.weekId), // Helper simple
+                    title: getWeekTitle(session.weekId),
                     sessions: []
                 });
             }
@@ -100,7 +97,6 @@ export const getContent = async (): Promise<WeekData[]> => {
     }
 };
 
-// Helper para títulos de semanas (Hardcoded o podría guardarse en DB también)
 const getWeekTitle = (id: number) => {
     const titles = [
         "Fundamentos de IA y Productividad",
@@ -113,18 +109,9 @@ const getWeekTitle = (id: number) => {
     return titles[id - 1] || `Semana ${id}`;
 };
 
-/**
- * CRUD USUARIOS
- */
 export const updateUser = async (user: User) => {
     if (!db) return;
-    try {
-        // Usamos el email como ID del documento para unicidad fácil
-        await setDoc(doc(db, USERS_COL, user.email), user, { merge: true });
-    } catch (e) {
-        console.error("Error actualizando usuario:", e);
-        throw e;
-    }
+    await setDoc(doc(db, USERS_COL, user.email), user, { merge: true });
 };
 
 export const deleteUser = async (email: string) => {
@@ -134,7 +121,6 @@ export const deleteUser = async (email: string) => {
 
 export const createUser = async (user: User) => {
     if (!db) return;
-    // Verificar si existe
     const docRef = doc(db, USERS_COL, user.email);
     const docSnap = await getDoc(docRef);
     if (docSnap.exists()) {
@@ -143,22 +129,15 @@ export const createUser = async (user: User) => {
     await setDoc(docRef, user);
 };
 
-/**
- * CRUD CONTENIDO
- */
 export const updateSession = async (session: ClassSession) => {
     if (!db) return;
     const docId = `w${session.weekId}-s${session.sessionNumber}`;
     await setDoc(doc(db, CONTENT_COL, docId), session, { merge: true });
 };
 
-/**
- * Guardar Progreso (Simplificado)
- */
 export const saveUserProgress = async (user: User, progressJson: Record<string, boolean>) => {
     if (!db) return;
     const count = Object.values(progressJson).filter(v => v).length;
-    
     const userRef = doc(db, USERS_COL, user.email);
     await updateDoc(userRef, {
         progress: { completed: count, total: 12 },
