@@ -40,7 +40,7 @@ let db: any;
 let isConfigured = false;
 
 try {
-    if (firebaseConfig.apiKey && firebaseConfig.apiKey !== "PEGA_TU_API_KEY_AQUI") {
+    if (firebaseConfig.apiKey && firebaseConfig.apiKey !== "AIzaSyDJbnvOYPKmYQV-tfOxwOcuKs8nfleo6JU") {
         // Inicialización Modular Estándar
         app = initializeApp(firebaseConfig);
         db = getFirestore(app); 
