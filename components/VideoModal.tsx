@@ -1,8 +1,9 @@
 
 import React, { useState, useEffect } from 'react';
-import { X, PlayCircle, FileText, CheckCircle, AlignLeft, BrainCircuit, RotateCcw, Award, Sparkles, FileType, Cloud, RefreshCw } from 'lucide-react';
+import { X, PlayCircle, FileText, CheckCircle, AlignLeft, BrainCircuit, RotateCcw, Award, Sparkles, FileType, Cloud, RefreshCw, ExternalLink } from 'lucide-react';
 import { ClassSession } from '../types';
 import { generateQuizFromText, generateSummaryFromText, QuizQuestion } from '../services/geminiService';
+import { getVideoEmbedUrl } from '../services/videoService';
 
 interface VideoModalProps {
   session: ClassSession | null;
@@ -55,7 +56,7 @@ const VideoModal: React.FC<VideoModalProps> = ({ session, onClose, onMarkComplet
   const handleMarkClick = async () => {
       if (!session) return;
       setIsSyncing(true);
-      await onMarkComplete(session.id); // In Firestore implementation, id might differ, handled by caller
+      await onMarkComplete(session.id);
       setTimeout(() => setIsSyncing(false), 500);
   };
 
@@ -77,7 +78,7 @@ const VideoModal: React.FC<VideoModalProps> = ({ session, onClose, onMarkComplet
                 setQuizStarted(true);
                 setUserAnswers(new Array(questions.length).fill(-1));
               } else {
-                alert("No se pudo generar el quiz.");
+                alert("No se pudo generar el quiz. Intenta de nuevo.");
               }
           } else {
               alert("No hay transcripción disponible para esta clase.");
@@ -103,6 +104,8 @@ const VideoModal: React.FC<VideoModalProps> = ({ session, onClose, onMarkComplet
 
   if (!session) return null;
 
+  const embedUrl = getVideoEmbedUrl(session.videoUrl || '');
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm animate-in fade-in duration-200">
       <div className="bg-surface w-full max-w-5xl rounded-2xl border border-slate-700 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
@@ -110,7 +113,7 @@ const VideoModal: React.FC<VideoModalProps> = ({ session, onClose, onMarkComplet
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-slate-700 bg-slate-900/90 backdrop-blur">
           <div>
-            <h3 className="text-xl font-bold text-white">{session.title}</h3>
+            <h3 className="text-xl font-bold text-white line-clamp-1">{session.title}</h3>
             <div className="flex gap-2 text-sm mt-1">
                 <span className="bg-primary/20 text-primary px-2 py-0.5 rounded text-xs font-bold uppercase tracking-wider">{session.day || `Clase ${session.sessionNumber}`}</span>
                 <span className="text-slate-400">Semana {weekId}</span>
@@ -126,20 +129,32 @@ const VideoModal: React.FC<VideoModalProps> = ({ session, onClose, onMarkComplet
 
         {/* Video Player Area */}
         <div className="bg-black aspect-video w-full shrink-0 max-h-[40vh] lg:max-h-[50vh] relative group">
-            {session.videoUrl ? (
+            {embedUrl ? (
                <iframe 
                width="100%" 
                height="100%" 
-               src={`https://www.youtube.com/embed/${session.videoUrl}`} 
+               src={embedUrl}
                title="Video Player"
                frameBorder="0" 
-               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen" 
                allowFullScreen
+               className="w-full h-full"
              ></iframe>
             ) : (
-                <div className="w-full h-full flex flex-col items-center justify-center text-slate-500 bg-slate-900/50">
-                    <PlayCircle size={48} className="mb-2 opacity-30" />
-                    <p>Video no disponible</p>
+                <div className="w-full h-full flex flex-col items-center justify-center text-slate-500 bg-slate-900/50 p-6 text-center">
+                    <PlayCircle size={48} className="mb-4 opacity-30" />
+                    <p className="font-bold text-lg text-slate-300">Video no disponible o enlace inválido</p>
+                    <p className="text-sm text-slate-500 mt-2 break-all">{session.videoUrl}</p>
+                    {session.videoUrl && (
+                        <a 
+                            href={session.videoUrl} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="mt-4 flex items-center gap-2 text-primary hover:text-white transition-colors text-sm border border-primary/30 px-4 py-2 rounded-lg"
+                        >
+                            <ExternalLink size={14} /> Abrir enlace original
+                        </a>
+                    )}
                 </div>
             )}
         </div>

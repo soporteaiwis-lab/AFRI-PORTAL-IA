@@ -1,8 +1,8 @@
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { User, WeekData, ClassSession } from '../types';
 import { updateUser, deleteUser, createUser, updateSession } from '../services/dataService';
-import { Save, Search, Database, Lock, Edit2, Users, Trash2, Plus, X, Video, Loader2, HardDrive } from 'lucide-react';
+import { Save, Search, Database, Lock, Edit2, Users, Trash2, Plus, X, Video, Loader2, HardDrive, Download, Upload, AlertTriangle } from 'lucide-react';
 
 interface AdminPanelProps {
   users: User[]; 
@@ -11,7 +11,7 @@ interface AdminPanelProps {
 }
 
 const AdminPanel: React.FC<AdminPanelProps> = ({ users, content, onRefresh }) => {
-  const [activeTab, setActiveTab] = useState<'users' | 'content'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'content' | 'backup'>('users');
   
   // USER STATE
   const [searchTerm, setSearchTerm] = useState('');
@@ -23,6 +23,9 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ users, content, onRefresh }) =>
   // CONTENT STATE
   const [editingSession, setEditingSession] = useState<ClassSession | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+
+  // BACKUP STATE
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // --- USER LOGIC ---
   const handleSaveUser = async (u: User) => {
@@ -88,6 +91,49 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ users, content, onRefresh }) =>
       }
   };
 
+  // --- BACKUP LOGIC ---
+  const handleExportDB = () => {
+      const data = {
+          users: localStorage.getItem('afri_sys_users_v1'),
+          content: localStorage.getItem('afri_sys_content_v1'),
+          timestamp: new Date().toISOString()
+      };
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `AFRI_BACKUP_${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+  };
+
+  const handleImportDB = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = (event) => {
+          try {
+              const data = JSON.parse(event.target?.result as string);
+              if (data.users && data.content) {
+                  if(confirm("⚠ ADVERTENCIA: Esto sobrescribirá TODOS los datos actuales con la copia de seguridad. ¿Estás seguro?")) {
+                      localStorage.setItem('afri_sys_users_v1', data.users);
+                      localStorage.setItem('afri_sys_content_v1', data.content);
+                      alert("✅ Base de Datos Restaurada con Éxito. El sistema se recargará.");
+                      window.location.reload();
+                  }
+              } else {
+                  alert("❌ Archivo de respaldo inválido.");
+              }
+          } catch (err) {
+              alert("❌ Error leyendo el archivo.");
+          }
+      };
+      reader.readAsText(file);
+  };
+
   const filteredUsers = (users || []).filter(u => 
       (u.name && u.name.toLowerCase().includes(searchTerm.toLowerCase())) || 
       (u.email && u.email.toLowerCase().includes(searchTerm.toLowerCase()))
@@ -120,7 +166,58 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ users, content, onRefresh }) =>
             >
                 <Video size={18} /> Contenidos
             </button>
+            <button 
+                onClick={() => setActiveTab('backup')}
+                className={`px-6 py-3 rounded-xl font-bold flex items-center gap-2 transition-all shadow-lg ml-auto ${activeTab === 'backup' ? 'bg-cobol text-black scale-105' : 'bg-slate-800 text-cobol border border-cobol/30 hover:bg-slate-700'}`}
+            >
+                <Database size={18} /> Copia de Seguridad
+            </button>
         </div>
+
+        {/* --- TAB: BACKUP --- */}
+        {activeTab === 'backup' && (
+            <div className="bg-surface border border-slate-700 rounded-2xl p-8 shadow-xl max-w-3xl mx-auto">
+                <div className="flex items-start gap-4 mb-8">
+                     <div className="p-4 bg-yellow-500/10 rounded-2xl border border-yellow-500/30 text-yellow-500">
+                         <AlertTriangle size={32} />
+                     </div>
+                     <div>
+                         <h3 className="text-xl font-bold text-white mb-2">Gestión de Persistencia de Datos</h3>
+                         <p className="text-slate-400 leading-relaxed">
+                             Al usar la Base de Datos Interna de Google (Local Storage), los datos viven en el navegador. 
+                             Si realizas un nuevo deploy en Google Cloud, es recomendable <strong>Exportar</strong> tu base de datos antes y <strong>Restaurarla</strong> después para no perder cambios recientes.
+                         </p>
+                     </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div className="bg-slate-900 p-6 rounded-xl border border-slate-700 flex flex-col items-center text-center hover:border-cobol/50 transition-colors">
+                        <Download size={48} className="text-cobol mb-4" />
+                        <h4 className="font-bold text-white text-lg mb-2">Exportar Base de Datos</h4>
+                        <p className="text-sm text-slate-500 mb-6">Descarga un archivo JSON con todos los usuarios y contenidos actuales.</p>
+                        <button onClick={handleExportDB} className="w-full py-3 bg-cobol hover:bg-green-400 text-black font-bold rounded-lg transition-colors">
+                            Descargar Respaldo
+                        </button>
+                    </div>
+
+                    <div className="bg-slate-900 p-6 rounded-xl border border-slate-700 flex flex-col items-center text-center hover:border-primary/50 transition-colors">
+                        <Upload size={48} className="text-primary mb-4" />
+                        <h4 className="font-bold text-white text-lg mb-2">Restaurar Base de Datos</h4>
+                        <p className="text-sm text-slate-500 mb-6">Sube un archivo JSON previamente exportado para recuperar tus datos.</p>
+                        <input 
+                            type="file" 
+                            ref={fileInputRef} 
+                            onChange={handleImportDB} 
+                            accept=".json" 
+                            className="hidden" 
+                        />
+                        <button onClick={() => fileInputRef.current?.click()} className="w-full py-3 bg-primary hover:bg-blue-600 text-white font-bold rounded-lg transition-colors">
+                            Subir Respaldo
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
 
         {/* --- TAB: USUARIOS --- */}
         {activeTab === 'users' && (
@@ -319,16 +416,17 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ users, content, onRefresh }) =>
                         </div>
 
                         <div>
-                            <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Video ID (YouTube) o URL</label>
+                            <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Video URL (YouTube, Drive, Meet)</label>
                             <div className="flex gap-2">
                                 <div className="bg-slate-800 p-3 rounded-lg text-slate-500"><Video size={18} /></div>
                                 <input 
                                     className="w-full bg-black border border-slate-700 p-3 rounded-lg text-white focus:border-primary outline-none font-mono text-sm" 
                                     value={editingSession.videoUrl}
-                                    placeholder="Ej: dQw4w9WgXcQ"
+                                    placeholder="Pegar link de YouTube o Google Drive aquí"
                                     onChange={e => setEditingSession({...editingSession, videoUrl: e.target.value})}
                                 />
                             </div>
+                            <p className="text-[10px] text-slate-500 mt-1">* Si es Google Drive, asegúrate de que el permiso sea "Cualquiera con el enlace puede ver".</p>
                         </div>
 
                         <div>

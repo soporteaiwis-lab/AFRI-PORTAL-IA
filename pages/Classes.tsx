@@ -1,13 +1,14 @@
 
 import React, { useState, useEffect } from 'react';
-import { getContent } from '../services/dataService'; // Usar servicio
+import { getContent } from '../services/dataService'; 
 import { ClassSession, User, WeekData } from '../types';
-import { Play, CheckCircle, Lock, FileText, BrainCircuit, Circle, Calendar, Loader2 } from 'lucide-react';
+import { Play, CheckCircle, Lock, FileText, BrainCircuit, Circle, Calendar, Loader2, Video as VideoIcon } from 'lucide-react';
 import VideoModal from '../components/VideoModal';
+import { getVideoThumbnail } from '../services/videoService';
 
 interface ClassesProps {
   user: User;
-  videos: Record<string, string>; // Legacy prop, we'll try to use content directly
+  videos: Record<string, string>; 
   onUpdateProgress: (count: number, progressJson: Record<string, boolean>) => Promise<void>;
 }
 
@@ -21,7 +22,6 @@ const Classes: React.FC<ClassesProps> = ({ user, onUpdateProgress }) => {
   const [activeWeekTab, setActiveWeekTab] = useState(1);
   const [updating, setUpdating] = useState(false);
 
-  // Cargar contenido dinámico al montar
   useEffect(() => {
     const loadContent = async () => {
         setLoading(true);
@@ -52,24 +52,6 @@ const Classes: React.FC<ClassesProps> = ({ user, onUpdateProgress }) => {
      if (selectedSession && selectedSession.id === session.id) {
          setSelectedSession({ ...selectedSession, isCompleted: newStatus });
      }
-  };
-  
-  const extractVideoId = (url: string) => {
-      if (!url) return '';
-      const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
-      const match = url.match(regExp);
-      return (match && match[2].length === 11) ? match[2] : '';
-  };
-
-  const getResourceLinks = (weekId: number, sessionNum: number) => {
-      // Fallback a recursos estáticos si no hay en DB
-      const classNumber = (weekId - 1) * 2 + sessionNum;
-      const formattedNum = String(classNumber).padStart(2, '0');
-      const baseUrl = "https://raw.githack.com/soporteaiwis-lab/simpledata/main";
-      return {
-          textUrl: `${baseUrl}/clase${formattedNum}.html`,
-          quizUrl: `${baseUrl}/quiz${formattedNum}.html`
-      };
   };
 
   const weeksToShow = activeTab === 1 ? [1, 2, 3] : [4, 5, 6];
@@ -132,12 +114,10 @@ const Classes: React.FC<ClassesProps> = ({ user, onUpdateProgress }) => {
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         {week.sessions.map((session) => {
-                            const videoId = extractVideoId(session.videoUrl || '');
+                            const thumbnailUrl = getVideoThumbnail(session.videoUrl || '');
                             
                             const progressKey = `s${week.id}-c${session.sessionNumber}`;
                             const isCompleted = user.progress_details?.[progressKey] || false;
-                            
-                            const { textUrl, quizUrl } = getResourceLinks(week.id, session.sessionNumber);
                             
                             const sessionWithData = { ...session, isCompleted, day: `Clase ${session.sessionNumber}` };
 
@@ -153,16 +133,21 @@ const Classes: React.FC<ClassesProps> = ({ user, onUpdateProgress }) => {
                                             setSelectedWeekId(week.id);
                                         }}
                                     >
-                                        {videoId ? (
+                                        {thumbnailUrl ? (
                                             <img 
-                                                src={`https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`} 
+                                                src={thumbnailUrl}
                                                 alt={session.title}
                                                 className="w-full h-full object-cover opacity-80 group-hover/card:opacity-100 group-hover/card:scale-105 transition-all duration-500"
                                             />
                                         ) : (
-                                            <div className="w-full h-full flex flex-col items-center justify-center bg-slate-900 text-slate-600">
-                                                <span className="text-4xl mb-2 opacity-50">🎬</span>
-                                                <span className="text-xs uppercase tracking-widest font-semibold">Próximamente</span>
+                                            <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-slate-800 to-slate-900 text-slate-600 relative overflow-hidden">
+                                                <div className="absolute inset-0 bg-cobol/5 pattern-grid opacity-20"></div>
+                                                <div className="z-10 bg-black/40 p-4 rounded-full border border-white/10 group-hover/card:border-primary/50 transition-colors">
+                                                     <VideoIcon size={32} className="text-slate-400 group-hover/card:text-primary transition-colors" />
+                                                </div>
+                                                <span className="text-xs font-bold text-slate-500 mt-3 uppercase tracking-wider z-10">
+                                                    {session.videoUrl ? 'Video Class' : 'Próximamente'}
+                                                </span>
                                             </div>
                                         )}
                                         
@@ -201,13 +186,11 @@ const Classes: React.FC<ClassesProps> = ({ user, onUpdateProgress }) => {
                                             <h4 className="font-bold text-white text-xl leading-tight drop-shadow-md">{session.title}</h4>
                                         </div>
 
-                                        {videoId && (
-                                            <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/card:opacity-100 transition-opacity duration-300 pointer-events-none">
-                                                <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center text-dark shadow-xl transform scale-75 group-hover/card:scale-100 transition-transform">
-                                                    <Play size={28} fill="currentColor" className="ml-1" />
-                                                </div>
+                                        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/card:opacity-100 transition-opacity duration-300 pointer-events-none">
+                                            <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center text-dark shadow-xl transform scale-75 group-hover/card:scale-100 transition-transform">
+                                                <Play size={28} fill="currentColor" className="ml-1" />
                                             </div>
-                                        )}
+                                        </div>
                                     </div>
 
                                     <div className="p-6 flex-1 flex flex-col">
