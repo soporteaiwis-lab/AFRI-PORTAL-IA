@@ -10,6 +10,7 @@ import Guide from './pages/Guide';
 import AdminPanel from './pages/AdminPanel';
 import { User, WeekData } from './types';
 import { getUsers, getContent, saveUserProgress, seedDatabaseIfEmpty } from './services/dataService';
+import { isConfigured } from './firebaseConfig';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -30,8 +31,10 @@ const App: React.FC = () => {
   const loadData = useCallback(async (isInitial = false) => {
     if (isInitial) setLoading(true);
     
-    // Inicializar base de datos interna
-    await seedDatabaseIfEmpty();
+    // Intentar inicializar la nube
+    if (isConfigured) {
+        await seedDatabaseIfEmpty();
+    }
 
     const [fetchedUsers, fetchedContent] = await Promise.all([
         getUsers(),
@@ -48,7 +51,6 @@ const App: React.FC = () => {
         if (currentUserData) {
              setUser(currentUserData);
         } else {
-             // Si el usuario no está en la DB actual, salir
              handleLogout();
         }
     }
@@ -82,16 +84,21 @@ const App: React.FC = () => {
         </div>
         <div className="text-center space-y-2">
             <p className="tracking-[0.3em] uppercase text-sm font-bold terminal-text">Cargando Sistema...</p>
-            <p className="text-[10px] text-slate-500">
-                INICIALIZANDO MOTOR DE DATOS INTERNO
+            <p className="text-[10px] text-slate-500 flex items-center justify-center gap-2">
+                {isConfigured ? '🟢 CONECTANDO A GOOGLE CLOUD DATABASE' : '🔴 MODO OFFLINE (SIN SYNC)'}
             </p>
+            {!isConfigured && (
+                <p className="text-[10px] text-red-500 animate-pulse">
+                   ⚠️ Requiere configurar firebaseConfig.ts para sync global
+                </p>
+            )}
         </div>
       </div>
     );
   }
 
   const isMaster = user?.role.toLowerCase().includes('master') || user?.email.includes('armin');
-  const videoMap: Record<string, string> = {}; // Legacy support
+  const videoMap: Record<string, string> = {}; 
 
   return (
     <HashRouter>
