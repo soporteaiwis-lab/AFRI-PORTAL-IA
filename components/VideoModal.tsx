@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { X, PlayCircle, FileText, CheckCircle, AlignLeft, BrainCircuit, RotateCcw, Award, Sparkles, FileType, Cloud, RefreshCw } from 'lucide-react';
 import { ClassSession } from '../types';
@@ -63,7 +64,8 @@ const VideoModal: React.FC<VideoModalProps> = ({ session, onClose, onMarkComplet
     
     setLoadingTranscript(true);
     // Construct URL for transcripts - Assuming standard naming convention
-    const dayName = session.day.replace('Clase ', 'clase').trim();
+    const dayLabel = session.day || `Clase ${session.sessionNumber}`;
+    const dayName = dayLabel.replace('Clase ', 'clase').trim();
     // Use fallback logic or standard naming. Assuming "fase1-semanaX-claseY.md" or similar based on GitHub
     const url = `https://raw.githubusercontent.com/soporteaiwis-lab/simpledata/main/transcripts/fase1-semana${weekId}-${dayName}.md`;
 
@@ -155,7 +157,7 @@ const VideoModal: React.FC<VideoModalProps> = ({ session, onClose, onMarkComplet
           <div>
             <h3 className="text-xl font-bold text-white">{session.title}</h3>
             <div className="flex gap-2 text-sm mt-1">
-                <span className="bg-primary/20 text-primary px-2 py-0.5 rounded text-xs font-bold uppercase tracking-wider">{session.day}</span>
+                <span className="bg-primary/20 text-primary px-2 py-0.5 rounded text-xs font-bold uppercase tracking-wider">{session.day || `Clase ${session.sessionNumber}`}</span>
                 <span className="text-slate-400">Semana {weekId}</span>
             </div>
           </div>

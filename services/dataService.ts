@@ -19,6 +19,7 @@ const LS_PROGRESS_KEY = 'afri_local_progress_backup';
 export const fetchAllData = async () => {
   const timestamp = new Date().getTime();
   try {
+    // IMPORTANTE: Se lee de las hojas terminadas en "3" como solicitó el usuario para AFRI
     const [usersRes, skillsRes, progressRes, videosRes] = await Promise.all([
       fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/Usuarios3?key=${API_KEY}&t=${timestamp}`),
       fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/Habilidades3?key=${API_KEY}&t=${timestamp}`),
@@ -71,7 +72,7 @@ const processData = (usersData: any, skillsData: any, progressData: any, videosD
         const email = row[0];
         
         // Intentar parsear JSON de la nube
-        let cloudDetails = {};
+        let cloudDetails: Record<string, boolean> = {};
         if (row[7]) {
            try {
              const rawJson = row[7].toString().trim();
@@ -81,11 +82,21 @@ const processData = (usersData: any, skillsData: any, progressData: any, videosD
            } catch (e) { console.warn("Error JSON Cloud", e); }
         }
 
-        // MERGE INTELLIGENT: 
-        // Si tenemos un backup local para este email, mezclamos. 
-        // Priorizamos 'true' (visto) sobre 'false' (no visto) para evitar reversiones.
+        // LOGICA DE MERGE INTELIGENTE (Crucial para no perder datos):
+        // Obtenemos el backup local para este usuario.
         const localDetails = localBackup[email] || {};
-        const mergedDetails = { ...cloudDetails, ...localDetails };
+        
+        // Creamos un nuevo objeto base con lo de la nube.
+        const mergedDetails: Record<string, boolean> = { ...cloudDetails };
+
+        // Sobre-escribimos con lo local SOLO si en local es TRUE.
+        // Esto evita que si la nube dice "Visto" y el local (antiguo) dice "No Visto", se borre.
+        // Pero si Local dice "Visto" (recién hecho) y Nube dice "No Visto" (lag), gana Local.
+        Object.keys(localDetails).forEach(key => {
+            if (localDetails[key] === true) {
+                mergedDetails[key] = true;
+            }
+        });
         
         // Calcular completadas reales basadas en el merge
         const completedCount = Object.values(mergedDetails).filter(v => v === true).length;
@@ -138,7 +149,7 @@ export const saveUserProgress = async (user: User, progressJson: Record<string, 
   const completadas = Object.values(progressJson).filter(v => v === true).length;
   const jsonString = JSON.stringify(progressJson);
 
-  // 1. SAVE LOCAL BACKUP IMMEDIATELY
+  // 1. SAVE LOCAL BACKUP IMMEDIATELY (Copia de seguridad en el dispositivo)
   try {
       const stored = localStorage.getItem(LS_PROGRESS_KEY);
       const backup = stored ? JSON.parse(stored) : {};
@@ -146,7 +157,7 @@ export const saveUserProgress = async (user: User, progressJson: Record<string, 
       localStorage.setItem(LS_PROGRESS_KEY, JSON.stringify(backup));
   } catch (e) { console.error("Local Backup Failed", e); }
 
-  // 2. SEND TO CLOUD
+  // 2. SEND TO CLOUD (Google Apps Script)
   const payload = {
     action: 'updateProgress',
     email: user.email,
@@ -159,7 +170,7 @@ export const saveUserProgress = async (user: User, progressJson: Record<string, 
   try {
     await fetch(APPS_SCRIPT_URL, {
         method: 'POST',
-        mode: 'no-cors', 
+        mode: 'no-cors', // Importante para enviar datos a Apps Script sin bloqueo CORS
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify(payload)
     });

@@ -1,3 +1,4 @@
+
 export interface User {
   id: string;
   email: string;
@@ -31,6 +32,7 @@ export interface ClassSession {
     text: string;
     quiz: string;
   };
+  day?: string;
 }
 
 export interface WeekData {

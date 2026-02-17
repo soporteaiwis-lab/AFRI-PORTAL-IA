@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { User } from '../types';
-import { ChevronRight, Users as UsersIcon, Lock, AlertCircle } from 'lucide-react';
+import { ChevronRight, Users as UsersIcon, Lock, AlertCircle, Database, ShieldCheck } from 'lucide-react';
 
 interface LoginProps {
   onLogin: (user: User) => void;
@@ -9,26 +9,35 @@ interface LoginProps {
 
 const Login: React.FC<LoginProps> = ({ onLogin, users }) => {
   const [loading, setLoading] = useState(false);
-  const [email, setEmail] = useState('');
+  const [identifier, setIdentifier] = useState(''); // Changed from email to identifier
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    
-    const user = users.find(u => u.email.toLowerCase() === email.toLowerCase());
+    performLogin(identifier, password);
+  };
+
+  const performLogin = (idVal: string, passVal: string) => {
+    // Buscar por Email O por Nombre
+    const user = users.find(u => 
+        u.email.toLowerCase() === idVal.toLowerCase().trim() || 
+        u.name.toLowerCase() === idVal.toLowerCase().trim()
+    );
     
     if (!user) {
-        setError('Usuario no encontrado en la base de datos.');
+        setError('Usuario no encontrado en la base de datos (Verifica Nombre o Correo).');
+        setLoading(false);
         return;
     }
 
     // Default password check if column is empty in sheet
     const validPass = user.password || '1234';
 
-    if (password !== validPass) {
+    if (passVal !== validPass) {
         setError('Contraseña incorrecta.');
+        setLoading(false);
         return;
     }
 
@@ -36,6 +45,15 @@ const Login: React.FC<LoginProps> = ({ onLogin, users }) => {
     setTimeout(() => {
         onLogin(user);
     }, 800);
+  };
+
+  const handleMasterAutoFill = () => {
+      const masterEmail = "armin@aiwis.cl";
+      const masterPass = "1234";
+      setIdentifier(masterEmail);
+      setPassword(masterPass);
+      // Opcional: Auto-submit inmediato
+      // performLogin(masterEmail, masterPass);
   };
 
   return (
@@ -59,10 +77,10 @@ const Login: React.FC<LoginProps> = ({ onLogin, users }) => {
               <div className="relative">
                   <UsersIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={20} />
                   <input 
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="Correo corporativo"
+                    type="text" 
+                    value={identifier}
+                    onChange={(e) => setIdentifier(e.target.value)}
+                    placeholder="Correo O Nombre (ej: Armin...)"
                     className="w-full bg-slate-900 border border-slate-700 rounded-xl pl-12 pr-4 py-4 text-white focus:outline-none focus:border-primary transition-colors"
                     required
                   />
@@ -103,7 +121,15 @@ const Login: React.FC<LoginProps> = ({ onLogin, users }) => {
           </button>
         </form>
 
-        <div className="mt-8 pt-6 border-t border-slate-800 text-center">
+        <div className="mt-8 pt-6 border-t border-slate-800 text-center space-y-4">
+            <button 
+                onClick={handleMasterAutoFill}
+                className="text-xs text-cobol hover:text-white transition-colors flex items-center justify-center gap-2 mx-auto border border-cobol/20 px-3 py-1.5 rounded-full hover:bg-cobol/10"
+            >
+                <ShieldCheck size={12} />
+                🔐 Acceso Master Root (Armin)
+            </button>
+
             <p className="text-xs text-slate-500">
                 ¿Olvidaste tu contraseña? Contacta a <span className="text-primary cursor-pointer hover:underline">Soporte Armin</span>
             </p>
