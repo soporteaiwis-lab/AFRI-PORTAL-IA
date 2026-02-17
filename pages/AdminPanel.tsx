@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+
+import React, { useState } from 'react';
 import { User, WeekData, ClassSession } from '../types';
 import { updateUser, deleteUser, createUser, updateSession } from '../services/dataService';
-import { saveFirebaseConfig, isConfigured, resetFirebaseConfig } from '../firebaseConfig';
-import { Save, Search, Database, Lock, Edit2, Users, Trash2, Plus, X, Video, Check, Loader2, Settings, AlertTriangle, LogOut } from 'lucide-react';
+import { Save, Search, Database, Lock, Edit2, Users, Trash2, Plus, X, Video, Loader2, HardDrive } from 'lucide-react';
 
 interface AdminPanelProps {
   users: User[]; 
@@ -11,7 +11,7 @@ interface AdminPanelProps {
 }
 
 const AdminPanel: React.FC<AdminPanelProps> = ({ users, content, onRefresh }) => {
-  const [activeTab, setActiveTab] = useState<'users' | 'content' | 'config'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'content'>('users');
   
   // USER STATE
   const [searchTerm, setSearchTerm] = useState('');
@@ -24,34 +24,12 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ users, content, onRefresh }) =>
   const [editingSession, setEditingSession] = useState<ClassSession | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
-  // CONFIG STATE
-  const [configJson, setConfigJson] = useState('');
-
-  useEffect(() => {
-      if (!isConfigured) {
-          setActiveTab('config');
-      }
-  }, []);
-
-  // --- CONFIG LOGIC ---
-  const handleSaveConfig = () => {
-      if (!configJson) return;
-      const success = saveFirebaseConfig(configJson);
-      if (success) {
-          alert("Configuración guardada. El sistema se reiniciará.");
-          window.location.reload();
-      } else {
-          alert("JSON Inválido. Asegúrate de copiar todo el objeto de configuración.");
-      }
-  };
-
   // --- USER LOGIC ---
   const handleSaveUser = async (u: User) => {
       if(!confirm("¿Guardar cambios en usuario?")) return;
       try {
           await updateUser(u);
           onRefresh();
-          alert("Usuario actualizado.");
       } catch (e: any) {
           alert("Error: " + e.message);
       }
@@ -85,7 +63,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ users, content, onRefresh }) =>
           setIsAddingUser(false);
           setNewUser({ name: '', email: '', role: 'Estudiante', password: '1234' });
           onRefresh();
-          alert("Usuario creado correctamente");
+          alert("Usuario creado correctamente.");
       } catch (e: any) {
           alert("Error: " + e.message);
       }
@@ -104,9 +82,9 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ users, content, onRefresh }) =>
       if (success) {
           setEditingSession(null);
           onRefresh(); 
-          alert("✅ Contenido guardado en la Nube correctamente.");
+          alert("✅ Contenido guardado en Base de Datos Interna.");
       } else {
-          alert("❌ ERROR AL GUARDAR. Verifica la configuración en la pestaña 'Configuración'.");
+          alert("❌ Error al guardar.");
       }
   };
 
@@ -118,18 +96,13 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ users, content, onRefresh }) =>
   return (
     <div className="animate-in fade-in pb-20 max-w-7xl mx-auto px-4">
         {/* Header */}
-        <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border-b border-red-500/30 p-8 rounded-b-3xl mb-8 shadow-2xl relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-64 h-64 bg-red-500/10 rounded-full blur-[80px]"></div>
-            <h1 className="text-4xl font-black text-red-500 mb-2 flex items-center gap-3 relative z-10">
-                <Database className="animate-pulse" /> PANEL MASTER ROOT
+        <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border-b border-cobol/30 p-8 rounded-b-3xl mb-8 shadow-2xl relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-64 h-64 bg-cobol/5 rounded-full blur-[80px]"></div>
+            <h1 className="text-4xl font-black text-white mb-2 flex items-center gap-3 relative z-10">
+                <Database className="text-cobol" /> PANEL MASTER ROOT
             </h1>
-            <p className="text-slate-400 relative z-10 flex items-center gap-2">
-                Estado DB: 
-                {isConfigured ? (
-                    <span className="text-green-400 font-bold bg-green-500/10 px-2 rounded flex items-center gap-1"><Check size={14}/> CONECTADO</span>
-                ) : (
-                    <span className="text-red-400 font-bold bg-red-500/10 px-2 rounded flex items-center gap-1 animate-pulse"><AlertTriangle size={14}/> DESCONECTADO</span>
-                )}
+            <p className="text-slate-400 relative z-10 flex items-center gap-2 font-mono text-sm">
+                <HardDrive size={14} className="text-cobol"/> BASE DE DATOS INTERNA: <span className="text-cobol font-bold">ACTIVA</span>
             </p>
         </div>
 
@@ -147,63 +120,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ users, content, onRefresh }) =>
             >
                 <Video size={18} /> Contenidos
             </button>
-            <button 
-                onClick={() => setActiveTab('config')}
-                className={`px-6 py-3 rounded-xl font-bold flex items-center gap-2 transition-all shadow-lg ${activeTab === 'config' ? 'bg-white text-dark scale-105' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
-            >
-                <Settings size={18} className={!isConfigured ? "animate-spin" : ""} /> Configuración
-            </button>
         </div>
-
-        {/* --- TAB: CONFIGURACIÓN --- */}
-        {activeTab === 'config' && (
-            <div className="bg-surface border border-slate-700 rounded-2xl p-8 max-w-3xl mx-auto shadow-2xl">
-                <h2 className="text-2xl font-bold text-white mb-4 flex items-center gap-2">
-                    <Settings className="text-cobol" /> Configuración de Base de Datos
-                </h2>
-                
-                {!isConfigured && (
-                    <div className="bg-red-500/20 border border-red-500/50 p-4 rounded-xl mb-6 text-red-200 flex items-start gap-3">
-                        <AlertTriangle className="shrink-0 mt-1" />
-                        <div>
-                            <p className="font-bold">¡Atención! Firebase no está configurado.</p>
-                            <p className="text-sm mt-1">El sistema no puede guardar datos. Pega tus credenciales abajo para conectar.</p>
-                        </div>
-                    </div>
-                )}
-
-                <div className="space-y-4">
-                    <div>
-                        <label className="block text-sm font-bold text-slate-400 mb-2">Pegar Objeto JSON de Firebase Config</label>
-                        <p className="text-xs text-slate-500 mb-2">Ve a Console Firebase {'>'} Project Settings {'>'} General {'>'} Your Apps {'>'} SDK Setup and Configuration (Config) y copia el objeto `const firebaseConfig = ...` (solo lo que está entre llaves).</p>
-                        <textarea 
-                            className="w-full bg-black border border-slate-700 rounded-xl p-4 font-mono text-xs text-green-400 h-48 focus:border-cobol outline-none"
-                            placeholder={'{\n  "apiKey": "AIzaSy...",\n  "authDomain": "...",\n  "projectId": "..."\n}'}
-                            value={configJson}
-                            onChange={(e) => setConfigJson(e.target.value)}
-                        />
-                    </div>
-                    
-                    <div className="flex gap-4 pt-4">
-                        <button 
-                            onClick={handleSaveConfig}
-                            className="bg-cobol hover:bg-green-400 text-black font-bold py-3 px-6 rounded-xl flex items-center gap-2 transition-transform hover:scale-105 shadow-lg shadow-green-500/20"
-                        >
-                            <Save size={20} /> Guardar y Conectar
-                        </button>
-                        
-                        {isConfigured && (
-                            <button 
-                                onClick={() => { if(confirm("¿Borrar configuración local?")) resetFirebaseConfig(); }}
-                                className="bg-slate-800 hover:bg-red-900/50 text-slate-400 hover:text-red-400 font-bold py-3 px-6 rounded-xl flex items-center gap-2"
-                            >
-                                <LogOut size={20} /> Resetear Config
-                            </button>
-                        )}
-                    </div>
-                </div>
-            </div>
-        )}
 
         {/* --- TAB: USUARIOS --- */}
         {activeTab === 'users' && (
@@ -227,7 +144,6 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ users, content, onRefresh }) =>
                     </button>
                 </div>
                 
-                {/* User Table */}
                 <div className="overflow-x-auto">
                     <table className="w-full text-left border-collapse">
                         <thead>
@@ -261,7 +177,6 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ users, content, onRefresh }) =>
                                         >
                                             <option value="Estudiante">Estudiante</option>
                                             <option value="Master Root">Master Root</option>
-                                            <option value="Profesor">Profesor</option>
                                         </select>
                                     </td>
                                     <td className="p-4">
@@ -299,7 +214,6 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ users, content, onRefresh }) =>
                     </table>
                 </div>
 
-                {/* Create User Modal */}
                 {isAddingUser && (
                     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
                         <div className="bg-surface border border-slate-600 p-8 rounded-2xl w-full max-w-md shadow-2xl">

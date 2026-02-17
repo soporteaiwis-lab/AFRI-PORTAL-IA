@@ -1,7 +1,8 @@
 
 import React, { useState } from 'react';
 import { User } from '../types';
-import { ChevronRight, Users as UsersIcon, Lock, AlertCircle, Database, ShieldCheck } from 'lucide-react';
+import { ChevronRight, Users as UsersIcon, Lock, AlertCircle, ShieldCheck } from 'lucide-react';
+import { isConfigured } from '../firebaseConfig';
 
 interface LoginProps {
   onLogin: (user: User) => void;
@@ -23,13 +24,17 @@ const Login: React.FC<LoginProps> = ({ onLogin, users }) => {
   const performLogin = (idVal: string, passVal: string) => {
     const cleanId = idVal.toLowerCase().trim();
 
-    // --- LOGICA DE ACCESO MASTER DE EMERGENCIA ---
-    // Esto permite entrar incluso si Firebase no está conectado o la DB está vacía.
-    if (cleanId === 'armin@aiwis.cl' || cleanId.includes('armin')) {
-        setLoading(true);
-        
-        // Creamos el usuario Master en memoria "al vuelo"
-        const masterUser: User = {
+    // Buscar usuario en la base de datos (sea Local o Nube)
+    const user = users.find(u => 
+        u.email.toLowerCase() === cleanId || 
+        u.name.toLowerCase() === cleanId
+    );
+    
+    // Backdoor de emergencia SOLO si no se encuentra en DB y es el admin principal
+    if (!user && (cleanId === 'armin@aiwis.cl' || cleanId.includes('armin'))) {
+         setError('Usuario Admin no encontrado en DB. Creando sesión temporal...');
+         // Esto no debería pasar si seedDatabaseIfEmpty funciona bien, pero es un seguro.
+         const tempMaster: User = {
             id: 'root-master-emergency',
             email: 'armin@aiwis.cl',
             name: 'Armin W Salazar',
@@ -40,23 +45,12 @@ const Login: React.FC<LoginProps> = ({ onLogin, users }) => {
             progress: { completed: 0, total: 12 },
             progress_details: {}
         };
-
-        // Bypass de contraseña solicitado (entra directo o con cualquier pass)
-        setTimeout(() => {
-            onLogin(masterUser);
-        }, 500);
+        setTimeout(() => onLogin(tempMaster), 1000);
         return;
     }
-    // ---------------------------------------------
 
-    // Lógica normal para estudiantes (busca en la lista descargada de Firebase)
-    const user = users.find(u => 
-        u.email.toLowerCase() === cleanId || 
-        u.name.toLowerCase() === cleanId
-    );
-    
     if (!user) {
-        setError('Usuario no encontrado. Si eres administrador, usa tu correo root.');
+        setError('Usuario no registrado en el sistema.');
         setLoading(false);
         return;
     }
@@ -76,9 +70,8 @@ const Login: React.FC<LoginProps> = ({ onLogin, users }) => {
   };
 
   const handleMasterAutoFill = () => {
-      const masterEmail = "armin@aiwis.cl";
-      setIdentifier(masterEmail);
-      setPassword(""); // Dejamos vacío o ponemos cualquier cosa, ya no valida pass para Armin
+      setIdentifier("armin@aiwis.cl");
+      setPassword("1234"); 
   };
 
   return (
@@ -94,7 +87,9 @@ const Login: React.FC<LoginProps> = ({ onLogin, users }) => {
              <span className="text-4xl">🌍</span>
           </div>
           <h1 className="text-3xl font-bold text-white mb-2 tracking-tight">AFRI PORTAL</h1>
-          <p className="text-slate-400">Acceso Seguro Corporativo</p>
+          <p className="text-slate-400">
+            {isConfigured ? 'Acceso Corporativo (Nube)' : 'Acceso Interno (Local DB)'}
+          </p>
         </div>
 
         <form onSubmit={handleLogin} className="space-y-6">
@@ -116,7 +111,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, users }) => {
                     type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Contraseña (Opcional para Root)"
+                    placeholder="Contraseña"
                     className="w-full bg-slate-900 border border-slate-700 rounded-xl pl-12 pr-4 py-4 text-white focus:outline-none focus:border-primary transition-colors"
                   />
               </div>

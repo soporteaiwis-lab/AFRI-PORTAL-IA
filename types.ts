@@ -1,9 +1,9 @@
 
 export interface User {
-  id: string; // Firebase Document ID
+  id: string; // Email o Firebase ID
   email: string;
   name: string;
-  role: string;
+  role: string; // 'Estudiante' | 'Master Root' | 'Profesor'
   avatar: string;
   password?: string; 
   stats: {
@@ -15,22 +15,31 @@ export interface User {
     completed: number;
     total: number;
   };
+  // Mapa de progreso: 'w1-s1': true
   progress_details?: Record<string, boolean>; 
 }
 
+export interface QuizItem {
+  question: string;
+  options: string[];
+  correctIndex: number;
+}
+
 export interface ClassSession {
-  id: string;
+  id: string; // Format: w1-s1
   weekId: number;
   sessionNumber: number; 
   title: string;
   description: string;
   videoUrl?: string; 
   meetLink?: string;
-  isCompleted?: boolean; // UI state
-  transcript?: string; // Stored directly in DB
-  quizJson?: string; // Stored directly in DB as stringified JSON
+  transcript?: string; // Markdown content
+  quiz?: QuizItem[]; // Estructura formal del Quiz
+  resources?: { title: string; url: string }[];
   date?: string;
   day?: string;
+  // UI helper props
+  isCompleted?: boolean; 
 }
 
 export interface WeekData {

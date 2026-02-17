@@ -1,21 +1,36 @@
+
 import React, { useState, useEffect } from 'react';
-import { COURSE_CONTENT } from '../constants';
-import { ClassSession, User } from '../types';
+import { getContent } from '../services/dataService'; // Usar servicio
+import { ClassSession, User, WeekData } from '../types';
 import { Play, CheckCircle, Lock, FileText, BrainCircuit, Circle, Calendar, Loader2 } from 'lucide-react';
 import VideoModal from '../components/VideoModal';
 
 interface ClassesProps {
   user: User;
-  videos: Record<string, string>;
+  videos: Record<string, string>; // Legacy prop, we'll try to use content directly
   onUpdateProgress: (count: number, progressJson: Record<string, boolean>) => Promise<void>;
 }
 
-const Classes: React.FC<ClassesProps> = ({ user, videos, onUpdateProgress }) => {
+const Classes: React.FC<ClassesProps> = ({ user, onUpdateProgress }) => {
+  const [content, setContent] = useState<WeekData[]>([]);
+  const [loading, setLoading] = useState(true);
+  
   const [selectedSession, setSelectedSession] = useState<ClassSession | null>(null);
   const [selectedWeekId, setSelectedWeekId] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState(1);
   const [activeWeekTab, setActiveWeekTab] = useState(1);
   const [updating, setUpdating] = useState(false);
+
+  // Cargar contenido dinámico al montar
+  useEffect(() => {
+    const loadContent = async () => {
+        setLoading(true);
+        const data = await getContent();
+        setContent(data);
+        setLoading(false);
+    };
+    loadContent();
+  }, []);
 
   const handleMarkComplete = async (session: ClassSession, weekId: number) => {
      setUpdating(true);
@@ -31,12 +46,9 @@ const Classes: React.FC<ClassesProps> = ({ user, videos, onUpdateProgress }) => 
      
      const newCount = Object.values(newProgressJson).filter(v => v === true).length;
      
-     // Calls App.tsx to update state and save to Cloud
      await onUpdateProgress(newCount, newProgressJson);
-     
      setUpdating(false);
      
-     // Update local modal state
      if (selectedSession && selectedSession.id === session.id) {
          setSelectedSession({ ...selectedSession, isCompleted: newStatus });
      }
@@ -50,6 +62,7 @@ const Classes: React.FC<ClassesProps> = ({ user, videos, onUpdateProgress }) => 
   };
 
   const getResourceLinks = (weekId: number, sessionNum: number) => {
+      // Fallback a recursos estáticos si no hay en DB
       const classNumber = (weekId - 1) * 2 + sessionNum;
       const formattedNum = String(classNumber).padStart(2, '0');
       const baseUrl = "https://raw.githack.com/soporteaiwis-lab/simpledata/main";
@@ -64,6 +77,8 @@ const Classes: React.FC<ClassesProps> = ({ user, videos, onUpdateProgress }) => 
   useEffect(() => {
     setActiveWeekTab(weeksToShow[0]);
   }, [activeTab]);
+
+  if (loading) return <div className="p-20 text-center text-cobol animate-pulse">Cargando Plan de Estudios...</div>;
 
   return (
     <div className="animate-in fade-in duration-500 pb-20">
@@ -106,7 +121,7 @@ const Classes: React.FC<ClassesProps> = ({ user, videos, onUpdateProgress }) => 
       </div>
 
       <div className="space-y-12">
-            {COURSE_CONTENT
+            {content
                 .filter(week => week.id === activeWeekTab)
                 .map((week) => (
                 <div key={week.id} className="relative animate-in slide-in-from-bottom-4 duration-500">
@@ -117,17 +132,14 @@ const Classes: React.FC<ClassesProps> = ({ user, videos, onUpdateProgress }) => 
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         {week.sessions.map((session) => {
-                            const videoMapKey = `${week.id}-${session.sessionNumber}`;
-                            const realVideoUrl = videos[videoMapKey] || '';
-                            const videoId = extractVideoId(realVideoUrl);
+                            const videoId = extractVideoId(session.videoUrl || '');
                             
-                            // SOURCE OF TRUTH: User prop from App (Fetched from Cloud)
                             const progressKey = `s${week.id}-c${session.sessionNumber}`;
                             const isCompleted = user.progress_details?.[progressKey] || false;
                             
                             const { textUrl, quizUrl } = getResourceLinks(week.id, session.sessionNumber);
                             
-                            const sessionWithVideo = { ...session, videoUrl: videoId, isCompleted, day: `Clase ${session.sessionNumber}` };
+                            const sessionWithData = { ...session, isCompleted, day: `Clase ${session.sessionNumber}` };
 
                             return (
                                 <div 
@@ -137,7 +149,7 @@ const Classes: React.FC<ClassesProps> = ({ user, videos, onUpdateProgress }) => 
                                     <div 
                                         className="h-56 bg-slate-900 relative overflow-hidden cursor-pointer"
                                         onClick={() => {
-                                            setSelectedSession(sessionWithVideo);
+                                            setSelectedSession(sessionWithData);
                                             setSelectedWeekId(week.id);
                                         }}
                                     >
@@ -202,22 +214,18 @@ const Classes: React.FC<ClassesProps> = ({ user, videos, onUpdateProgress }) => 
                                         <p className="text-slate-400 line-clamp-3 mb-6 flex-1">{session.description}</p>
                                         
                                         <div className="grid grid-cols-2 gap-3 mt-auto pt-4 border-t border-slate-800">
-                                            <a 
-                                                href={textUrl}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
+                                            <button 
+                                                onClick={() => { setSelectedSession(sessionWithData); setSelectedWeekId(week.id); }}
                                                 className="flex items-center justify-center gap-2 py-3 text-xs font-bold bg-slate-800 hover:bg-primary/20 hover:text-primary hover:border-primary/50 text-slate-300 rounded-lg border border-slate-700 transition-all"
                                             >
-                                                <FileText size={16} /> Material
-                                            </a>
-                                            <a 
-                                                href={quizUrl}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
+                                                <FileText size={16} /> Ver Material
+                                            </button>
+                                            <button 
+                                                 onClick={() => { setSelectedSession(sessionWithData); setSelectedWeekId(week.id); }}
                                                 className="flex items-center justify-center gap-2 py-3 text-xs font-bold bg-slate-800 hover:bg-secondary/20 hover:text-secondary hover:border-secondary/50 text-slate-300 rounded-lg border border-slate-700 transition-all"
                                             >
                                                 <BrainCircuit size={16} /> Quiz
-                                            </a>
+                                            </button>
                                         </div>
                                     </div>
                                 </div>

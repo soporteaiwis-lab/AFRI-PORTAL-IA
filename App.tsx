@@ -10,19 +10,28 @@ import Guide from './pages/Guide';
 import AdminPanel from './pages/AdminPanel';
 import { User, WeekData } from './types';
 import { getUsers, getContent, saveUserProgress, seedDatabaseIfEmpty } from './services/dataService';
-import { db } from './firebaseConfig';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [content, setContent] = useState<WeekData[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const handleLogin = (newUser: User) => {
+    setUser(newUser);
+    localStorage.setItem('simpledata_user_email', newUser.email);
+  };
+
+  const handleLogout = useCallback(() => {
+    setUser(null);
+    localStorage.removeItem('simpledata_user_email');
+  }, []);
   
   const loadData = useCallback(async (isInitial = false) => {
     if (isInitial) setLoading(true);
     
-    // Attempt to seed if empty (First run)
-    if (isInitial && db) await seedDatabaseIfEmpty();
+    // Inicializar base de datos interna
+    await seedDatabaseIfEmpty();
 
     const [fetchedUsers, fetchedContent] = await Promise.all([
         getUsers(),
@@ -32,36 +41,24 @@ const App: React.FC = () => {
     setUsers(fetchedUsers);
     setContent(fetchedContent);
 
-    // Refresh current user data if logged in
+    // Restaurar sesión
     const storedEmail = localStorage.getItem('simpledata_user_email');
     if (storedEmail) {
         const currentUserData = fetchedUsers.find(u => u.email === storedEmail);
         if (currentUserData) {
              setUser(currentUserData);
-        } else if (user) {
-             // If user was deleted from DB but has session, logout
+        } else {
+             // Si el usuario no está en la DB actual, salir
              handleLogout();
         }
     }
     
     if (isInitial) setLoading(false);
-  }, [user]);
+  }, [handleLogout]);
 
   useEffect(() => {
     loadData(true);
-    // Polling is less critical with Firebase real-time but good for simple refresh
-    // We can reduce frequency or rely on manual refresh in components
   }, [loadData]);
-
-  const handleLogin = (newUser: User) => {
-    setUser(newUser);
-    localStorage.setItem('simpledata_user_email', newUser.email);
-  };
-
-  const handleLogout = () => {
-    setUser(null);
-    localStorage.removeItem('simpledata_user_email');
-  };
 
   const handleUpdateProgress = async (count: number, progressJson: Record<string, boolean>) => {
     if (!user) return;
@@ -84,25 +81,17 @@ const App: React.FC = () => {
             <div className="absolute inset-0 flex items-center justify-center text-xs animate-pulse">AFRI</div>
         </div>
         <div className="text-center space-y-2">
-            <p className="tracking-[0.3em] uppercase text-sm font-bold terminal-text">Iniciando Sistemas...</p>
-            <p className="text-[10px] text-slate-500">CONECTANDO A FIREBASE CLOUD</p>
-            {!db && <p className="text-red-500 font-bold bg-red-900/20 p-2 rounded">⚠️ FALTA API KEY EN firebaseConfig.ts</p>}
+            <p className="tracking-[0.3em] uppercase text-sm font-bold terminal-text">Cargando Sistema...</p>
+            <p className="text-[10px] text-slate-500">
+                INICIALIZANDO MOTOR DE DATOS INTERNO
+            </p>
         </div>
       </div>
     );
   }
 
   const isMaster = user?.role.toLowerCase().includes('master') || user?.email.includes('armin');
-
-  // Flatten videos map for compatibility with existing components if needed, 
-  // but better to pass the Content object structure down.
-  // Converting Content to simple VideoMap for compatibility with legacy components:
-  const videoMap: Record<string, string> = {};
-  content.forEach(week => {
-      week.sessions.forEach(session => {
-          videoMap[`${week.id}-${session.sessionNumber}`] = session.videoUrl || '';
-      });
-  });
+  const videoMap: Record<string, string> = {}; // Legacy support
 
   return (
     <HashRouter>

@@ -1,16 +1,19 @@
 
-import { db } from '../firebaseConfig';
 import { User, ClassSession, WeekData } from '../types';
-import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc, query, orderBy, getDoc } from 'firebase/firestore';
 import { COURSE_CONTENT } from '../constants';
 
-// Colecciones
-const USERS_COL = 'users';
-const CONTENT_COL = 'content';
+// --- MOTOR DE BASE DE DATOS INTERNO (INTERNAL DB ENGINE) ---
+// Este servicio gestiona toda la persistencia de datos localmente.
+// No requiere API Keys externas.
 
-// USUARIO DE RESPALDO (FALLBACK)
-const FALLBACK_ADMIN: User = {
-    id: 'admin-root-fallback',
+const DB_KEYS = {
+    USERS: 'afri_sys_users_v1',
+    CONTENT: 'afri_sys_content_v1'
+};
+
+// --- DATA SEEDING (SEMILLA INICIAL) ---
+const ROOT_ADMIN: User = {
+    id: 'root-admin',
     email: 'armin@aiwis.cl',
     name: 'Armin W Salazar',
     role: 'Master Root',
@@ -21,147 +24,132 @@ const FALLBACK_ADMIN: User = {
     progress_details: {}
 };
 
-export const seedDatabaseIfEmpty = async () => {
-    if (!db) return;
+// ==========================================
+// INTERNAL CONTROLLERS
+// ==========================================
 
+const _loadUsers = (): User[] => {
     try {
-        const usersSnap = await getDocs(collection(db, USERS_COL));
-        if (usersSnap.empty) {
-            console.log("Sembrando base de datos inicial...");
-            await setDoc(doc(db, USERS_COL, FALLBACK_ADMIN.email), FALLBACK_ADMIN);
+        const data = localStorage.getItem(DB_KEYS.USERS);
+        if (!data) return [ROOT_ADMIN];
+        return JSON.parse(data);
+    } catch (e) {
+        return [ROOT_ADMIN];
+    }
+};
 
-            for (const week of COURSE_CONTENT) {
-                for (const session of week.sessions) {
-                    // Sanitización inicial
-                    const sessionData: ClassSession = {
-                        ...session,
-                        weekId: week.id,
-                        videoUrl: session.videoUrl || '',
-                        transcript: session.transcript || '',
-                        description: session.description || ''
-                    };
-                    const docId = `w${week.id}-s${session.sessionNumber}`;
-                    await setDoc(doc(db, CONTENT_COL, docId), sessionData);
+const _saveUsers = (users: User[]) => {
+    localStorage.setItem(DB_KEYS.USERS, JSON.stringify(users));
+};
+
+const _loadContent = (): WeekData[] => {
+    try {
+        const data = localStorage.getItem(DB_KEYS.CONTENT);
+        if (!data) return COURSE_CONTENT;
+        
+        // Rehidratar datos: Mezclar estructura base con cambios guardados
+        const savedSessions: ClassSession[] = JSON.parse(data);
+        const contentClone = JSON.parse(JSON.stringify(COURSE_CONTENT)) as WeekData[];
+        
+        savedSessions.forEach(savedS => {
+            contentClone.forEach(week => {
+                const idx = week.sessions.findIndex(s => s.id === savedS.id);
+                if (idx !== -1) {
+                    week.sessions[idx] = { ...week.sessions[idx], ...savedS };
                 }
-            }
-            console.log("Base de datos sembrada.");
-        }
-    } catch (e) {
-        console.error("Error sembrando DB:", e);
-    }
-};
-
-export const getUsers = async (): Promise<User[]> => {
-    if (!db) return [FALLBACK_ADMIN]; 
-
-    try {
-        const snapshot = await getDocs(collection(db, USERS_COL));
-        if (snapshot.empty) {
-            return [FALLBACK_ADMIN];
-        }
-        return snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as User));
-    } catch (e) {
-        console.error("Error obteniendo usuarios, usando fallback:", e);
-        return [FALLBACK_ADMIN];
-    }
-};
-
-export const getContent = async (): Promise<WeekData[]> => {
-    if (!db) return COURSE_CONTENT; 
-    try {
-        const snapshot = await getDocs(query(collection(db, CONTENT_COL), orderBy('weekId'), orderBy('sessionNumber')));
-        
-        if (snapshot.empty) return COURSE_CONTENT;
-
-        const sessions = snapshot.docs.map(doc => doc.data() as ClassSession);
-        
-        const weeksMap = new Map<number, WeekData>();
-        
-        sessions.forEach(session => {
-            if (!weeksMap.has(session.weekId)) {
-                weeksMap.set(session.weekId, {
-                    id: session.weekId,
-                    title: getWeekTitle(session.weekId),
-                    sessions: []
-                });
-            }
-            weeksMap.get(session.weekId)?.sessions.push(session);
+            });
         });
-
-        return Array.from(weeksMap.values()).sort((a, b) => a.id - b.id);
+        return contentClone;
     } catch (e) {
-        console.error("Error obteniendo contenido:", e);
         return COURSE_CONTENT;
     }
 };
 
-const getWeekTitle = (id: number) => {
-    const titles = [
-        "Fundamentos de IA y Productividad",
-        "Herramientas y Desarrollo Asistido",
-        "Infraestructura Cloud e IA",
-        "Automatización Avanzada",
-        "Estrategia y Negocio",
-        "Proyecto Final"
-    ];
-    return titles[id - 1] || `Semana ${id}`;
+const _saveSessionUpdate = (session: ClassSession) => {
+    const data = localStorage.getItem(DB_KEYS.CONTENT);
+    let savedSessions: ClassSession[] = data ? JSON.parse(data) : [];
+    
+    const index = savedSessions.findIndex(s => s.id === session.id);
+    if (index >= 0) {
+        savedSessions[index] = session;
+    } else {
+        savedSessions.push(session);
+    }
+    
+    localStorage.setItem(DB_KEYS.CONTENT, JSON.stringify(savedSessions));
 };
 
-export const updateUser = async (user: User) => {
-    if (!db) throw new Error("Base de datos no conectada");
-    await setDoc(doc(db, USERS_COL, user.email), user, { merge: true });
+// ==========================================
+// PUBLIC API SERVICES
+// ==========================================
+
+export const seedDatabaseIfEmpty = async () => {
+    // Inicialización silenciosa del motor interno
+    if (!localStorage.getItem(DB_KEYS.USERS)) {
+        _saveUsers([ROOT_ADMIN]);
+        console.log("⚡ [INTERNAL_DB] Sistema inicializado correctamente.");
+    }
 };
 
-export const deleteUser = async (email: string) => {
-    if (!db) throw new Error("Base de datos no conectada");
-    await deleteDoc(doc(db, USERS_COL, email));
+export const getUsers = async (): Promise<User[]> => {
+    // Simular latencia de red mínima para realismo
+    return new Promise(resolve => {
+        setTimeout(() => resolve(_loadUsers()), 100);
+    });
+};
+
+export const getContent = async (): Promise<WeekData[]> => {
+    return new Promise(resolve => {
+        setTimeout(() => resolve(_loadContent()), 100);
+    });
 };
 
 export const createUser = async (user: User) => {
-    if (!db) throw new Error("Base de datos no conectada");
-    const docRef = doc(db, USERS_COL, user.email);
-    const docSnap = await getDoc(docRef);
-    if (docSnap.exists()) {
-        throw new Error("El usuario ya existe");
+    const users = _loadUsers();
+    if (users.find(u => u.email === user.email)) {
+        throw new Error("El usuario ya existe.");
     }
-    await setDoc(docRef, user);
+    users.push(user);
+    _saveUsers(users);
+};
+
+export const updateUser = async (user: User) => {
+    const users = _loadUsers();
+    const index = users.findIndex(u => u.email === user.email);
+    if (index !== -1) {
+        users[index] = user;
+        _saveUsers(users);
+    }
+};
+
+export const deleteUser = async (email: string) => {
+    const users = _loadUsers().filter(u => u.email !== email);
+    _saveUsers(users);
 };
 
 export const updateSession = async (session: ClassSession) => {
-    if (!db) {
-        console.error("Intento de guardar sesión sin conexión a DB");
-        return false;
-    }
-    
     try {
-        const docId = `w${session.weekId}-s${session.sessionNumber}`;
-        
-        // SANITIZACIÓN: Firestore odia los 'undefined'. Convertimos a string vacío o null.
         const safeSession = {
             ...session,
             videoUrl: session.videoUrl || '',
             transcript: session.transcript || '',
             description: session.description || '',
-            quizJson: session.quizJson || '',
-            meetLink: session.meetLink || '',
+            quiz: session.quiz || [],
             date: session.date || 'Por definir'
         };
-
-        await setDoc(doc(db, CONTENT_COL, docId), safeSession, { merge: true });
-        console.log(`Sesión ${docId} actualizada en Firestore.`);
+        _saveSessionUpdate(safeSession);
         return true;
     } catch (e) {
-        console.error("Error guardando sesión:", e);
         return false;
     }
 };
 
 export const saveUserProgress = async (user: User, progressJson: Record<string, boolean>) => {
-    if (!db) return;
     const count = Object.values(progressJson).filter(v => v).length;
-    const userRef = doc(db, USERS_COL, user.email);
-    await updateDoc(userRef, {
+    const updatedUser = { 
+        ...user, 
         progress: { completed: count, total: 12 },
         progress_details: progressJson
-    });
+    };
+    updateUser(updatedUser);
 };
