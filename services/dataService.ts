@@ -32,6 +32,7 @@ export const seedDatabaseIfEmpty = async () => {
 
             for (const week of COURSE_CONTENT) {
                 for (const session of week.sessions) {
+                    // Sanitización inicial
                     const sessionData: ClassSession = {
                         ...session,
                         weekId: week.id,
@@ -51,19 +52,16 @@ export const seedDatabaseIfEmpty = async () => {
 };
 
 export const getUsers = async (): Promise<User[]> => {
-    // Si no hay DB (clave API faltante), devolvemos Admin local para que el login funcione
     if (!db) return [FALLBACK_ADMIN]; 
 
     try {
         const snapshot = await getDocs(collection(db, USERS_COL));
         if (snapshot.empty) {
-            // Si la colección existe pero está vacía, devolvemos el fallback para permitir login inicial
             return [FALLBACK_ADMIN];
         }
         return snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as User));
     } catch (e) {
         console.error("Error obteniendo usuarios, usando fallback:", e);
-        // En caso de error de red o permisos, permitir acceso local al Admin
         return [FALLBACK_ADMIN];
     }
 };
@@ -110,17 +108,17 @@ const getWeekTitle = (id: number) => {
 };
 
 export const updateUser = async (user: User) => {
-    if (!db) return;
+    if (!db) throw new Error("Base de datos no conectada");
     await setDoc(doc(db, USERS_COL, user.email), user, { merge: true });
 };
 
 export const deleteUser = async (email: string) => {
-    if (!db) return;
+    if (!db) throw new Error("Base de datos no conectada");
     await deleteDoc(doc(db, USERS_COL, email));
 };
 
 export const createUser = async (user: User) => {
-    if (!db) return;
+    if (!db) throw new Error("Base de datos no conectada");
     const docRef = doc(db, USERS_COL, user.email);
     const docSnap = await getDoc(docRef);
     if (docSnap.exists()) {
@@ -130,9 +128,32 @@ export const createUser = async (user: User) => {
 };
 
 export const updateSession = async (session: ClassSession) => {
-    if (!db) return;
-    const docId = `w${session.weekId}-s${session.sessionNumber}`;
-    await setDoc(doc(db, CONTENT_COL, docId), session, { merge: true });
+    if (!db) {
+        console.error("Intento de guardar sesión sin conexión a DB");
+        return false;
+    }
+    
+    try {
+        const docId = `w${session.weekId}-s${session.sessionNumber}`;
+        
+        // SANITIZACIÓN: Firestore odia los 'undefined'. Convertimos a string vacío o null.
+        const safeSession = {
+            ...session,
+            videoUrl: session.videoUrl || '',
+            transcript: session.transcript || '',
+            description: session.description || '',
+            quizJson: session.quizJson || '',
+            meetLink: session.meetLink || '',
+            date: session.date || 'Por definir'
+        };
+
+        await setDoc(doc(db, CONTENT_COL, docId), safeSession, { merge: true });
+        console.log(`Sesión ${docId} actualizada en Firestore.`);
+        return true;
+    } catch (e) {
+        console.error("Error guardando sesión:", e);
+        return false;
+    }
 };
 
 export const saveUserProgress = async (user: User, progressJson: Record<string, boolean>) => {

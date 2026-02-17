@@ -2,16 +2,17 @@
 import React, { useState, useEffect } from 'react';
 import { User, WeekData, ClassSession } from '../types';
 import { updateUser, deleteUser, createUser, updateSession } from '../services/dataService';
-import { Save, Search, Database, PlayCircle, Lock, Edit2, Users, Trash2, Plus, X, Video, FileText, Check } from 'lucide-react';
+import { saveFirebaseConfig, isConfigured, resetFirebaseConfig } from '../firebaseConfig';
+import { Save, Search, Database, PlayCircle, Lock, Edit2, Users, Trash2, Plus, X, Video, FileText, Check, Loader2, Settings, AlertTriangle, LogOut } from 'lucide-react';
 
 interface AdminPanelProps {
-  users: User[]; // Estos vienen de App.tsx que ya los carga de Firebase
-  content: WeekData[]; // Necesitamos pasar el contenido también
-  onRefresh: () => void; // Para recargar datos después de editar
+  users: User[]; 
+  content: WeekData[]; 
+  onRefresh: () => void; 
 }
 
 const AdminPanel: React.FC<AdminPanelProps> = ({ users, content, onRefresh }) => {
-  const [activeTab, setActiveTab] = useState<'users' | 'content'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'content' | 'config'>('users');
   
   // USER STATE
   const [searchTerm, setSearchTerm] = useState('');
@@ -22,18 +23,50 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ users, content, onRefresh }) =>
 
   // CONTENT STATE
   const [editingSession, setEditingSession] = useState<ClassSession | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+
+  // CONFIG STATE
+  const [configJson, setConfigJson] = useState('');
+
+  useEffect(() => {
+      // Si no está configurado, forzar vista de config
+      if (!isConfigured) {
+          setActiveTab('config');
+      }
+  }, []);
+
+  // --- CONFIG LOGIC ---
+  const handleSaveConfig = () => {
+      if (!configJson) return;
+      const success = saveFirebaseConfig(configJson);
+      if (success) {
+          alert("Configuración guardada. El sistema se reiniciará.");
+          window.location.reload();
+      } else {
+          alert("JSON Inválido. Asegúrate de copiar todo el objeto de configuración.");
+      }
+  };
 
   // --- USER LOGIC ---
   const handleSaveUser = async (u: User) => {
       if(!confirm("¿Guardar cambios en usuario?")) return;
-      await updateUser(u);
-      onRefresh();
+      try {
+          await updateUser(u);
+          onRefresh();
+          alert("Usuario actualizado.");
+      } catch (e: any) {
+          alert("Error: " + e.message);
+      }
   };
 
   const handleDeleteUser = async (email: string) => {
       if(!confirm(`¿ELIMINAR USUARIO ${email}? Esta acción no se puede deshacer.`)) return;
-      await deleteUser(email);
-      onRefresh();
+      try {
+          await deleteUser(email);
+          onRefresh();
+      } catch (e: any) {
+          alert("Error: " + e.message);
+      }
   };
 
   const handleCreateUser = async () => {
@@ -54,6 +87,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ users, content, onRefresh }) =>
           setIsAddingUser(false);
           setNewUser({ name: '', email: '', role: 'Estudiante', password: '1234' });
           onRefresh();
+          alert("Usuario creado correctamente");
       } catch (e: any) {
           alert("Error: " + e.message);
       }
@@ -62,9 +96,21 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ users, content, onRefresh }) =>
   // --- CONTENT LOGIC ---
   const handleSaveSession = async () => {
       if(!editingSession) return;
-      await updateSession(editingSession);
-      setEditingSession(null);
-      onRefresh();
+      
+      setIsSaving(true);
+      
+      // Llamamos al servicio actualizado que devuelve true/false
+      const success = await updateSession(editingSession);
+      
+      setIsSaving(false);
+      
+      if (success) {
+          setEditingSession(null);
+          onRefresh(); 
+          alert("✅ Contenido guardado en la Nube correctamente.");
+      } else {
+          alert("❌ ERROR AL GUARDAR. Verifica la configuración en la pestaña 'Configuración'.");
+      }
   };
 
   const filteredUsers = users.filter(u => 
@@ -80,26 +126,87 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ users, content, onRefresh }) =>
             <h1 className="text-4xl font-black text-red-500 mb-2 flex items-center gap-3 relative z-10">
                 <Database className="animate-pulse" /> PANEL MASTER ROOT
             </h1>
-            <p className="text-slate-400 relative z-10">
-                Control Total del Sistema AFRI. Base de Datos: <span className="text-green-400 font-mono">FIREBASE FIRESTORE</span>
+            <p className="text-slate-400 relative z-10 flex items-center gap-2">
+                Estado DB: 
+                {isConfigured ? (
+                    <span className="text-green-400 font-bold bg-green-500/10 px-2 rounded flex items-center gap-1"><Check size={14}/> CONECTADO</span>
+                ) : (
+                    <span className="text-red-400 font-bold bg-red-500/10 px-2 rounded flex items-center gap-1 animate-pulse"><AlertTriangle size={14}/> DESCONECTADO</span>
+                )}
             </p>
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-4 mb-6">
+        <div className="flex gap-4 mb-6 flex-wrap">
             <button 
                 onClick={() => setActiveTab('users')}
-                className={`px-8 py-4 rounded-xl font-bold flex items-center gap-2 transition-all shadow-lg ${activeTab === 'users' ? 'bg-primary text-white scale-105' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
+                className={`px-6 py-3 rounded-xl font-bold flex items-center gap-2 transition-all shadow-lg ${activeTab === 'users' ? 'bg-primary text-white scale-105' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
             >
-                <Users size={20} /> Usuarios
+                <Users size={18} /> Usuarios
             </button>
             <button 
                 onClick={() => setActiveTab('content')}
-                className={`px-8 py-4 rounded-xl font-bold flex items-center gap-2 transition-all shadow-lg ${activeTab === 'content' ? 'bg-secondary text-white scale-105' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
+                className={`px-6 py-3 rounded-xl font-bold flex items-center gap-2 transition-all shadow-lg ${activeTab === 'content' ? 'bg-secondary text-white scale-105' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
             >
-                <Video size={20} /> Contenidos & Clases
+                <Video size={18} /> Contenidos
+            </button>
+            <button 
+                onClick={() => setActiveTab('config')}
+                className={`px-6 py-3 rounded-xl font-bold flex items-center gap-2 transition-all shadow-lg ${activeTab === 'config' ? 'bg-white text-dark scale-105' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
+            >
+                <Settings size={18} className={!isConfigured ? "animate-spin" : ""} /> Configuración
             </button>
         </div>
+
+        {/* --- TAB: CONFIGURACIÓN --- */}
+        {activeTab === 'config' && (
+            <div className="bg-surface border border-slate-700 rounded-2xl p-8 max-w-3xl mx-auto shadow-2xl">
+                <h2 className="text-2xl font-bold text-white mb-4 flex items-center gap-2">
+                    <Settings className="text-cobol" /> Configuración de Base de Datos
+                </h2>
+                
+                {!isConfigured && (
+                    <div className="bg-red-500/20 border border-red-500/50 p-4 rounded-xl mb-6 text-red-200 flex items-start gap-3">
+                        <AlertTriangle className="shrink-0 mt-1" />
+                        <div>
+                            <p className="font-bold">¡Atención! Firebase no está configurado.</p>
+                            <p className="text-sm mt-1">El sistema no puede guardar datos. Pega tus credenciales abajo para conectar.</p>
+                        </div>
+                    </div>
+                )}
+
+                <div className="space-y-4">
+                    <div>
+                        <label className="block text-sm font-bold text-slate-400 mb-2">Pegar Objeto JSON de Firebase Config</label>
+                        <p className="text-xs text-slate-500 mb-2">Ve a Console Firebase {'>'} Project Settings {'>'} General {'>'} Your Apps {'>'} SDK Setup and Configuration (Config) y copia el objeto `const firebaseConfig = { ... }` (solo lo que está entre llaves).</p>
+                        <textarea 
+                            className="w-full bg-black border border-slate-700 rounded-xl p-4 font-mono text-xs text-green-400 h-48 focus:border-cobol outline-none"
+                            placeholder={'{\n  "apiKey": "AIzaSy...",\n  "authDomain": "...",\n  "projectId": "..."\n}'}
+                            value={configJson}
+                            onChange={(e) => setConfigJson(e.target.value)}
+                        />
+                    </div>
+                    
+                    <div className="flex gap-4 pt-4">
+                        <button 
+                            onClick={handleSaveConfig}
+                            className="bg-cobol hover:bg-green-400 text-black font-bold py-3 px-6 rounded-xl flex items-center gap-2 transition-transform hover:scale-105 shadow-lg shadow-green-500/20"
+                        >
+                            <Save size={20} /> Guardar y Conectar
+                        </button>
+                        
+                        {isConfigured && (
+                            <button 
+                                onClick={() => { if(confirm("¿Borrar configuración local?")) resetFirebaseConfig(); }}
+                                className="bg-slate-800 hover:bg-red-900/50 text-slate-400 hover:text-red-400 font-bold py-3 px-6 rounded-xl flex items-center gap-2"
+                            >
+                                <LogOut size={20} /> Resetear Config
+                            </button>
+                        )}
+                    </div>
+                </div>
+            </div>
+        )}
 
         {/* --- TAB: USUARIOS --- */}
         {activeTab === 'users' && (
@@ -166,11 +273,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ users, content, onRefresh }) =>
                                             <input 
                                                 type="text" 
                                                 value={u.password || ''}
-                                                onChange={(e) => {
-                                                    // This needs local state to handle typing, but for rapid admin panel direct update on blur is okay or enter
-                                                    // For simplicity, we create a prompt or just let it be strictly managed via a dedicated edit button in real app.
-                                                    // Here we'll use a prompt for safety
-                                                }}
+                                                onChange={(e) => {}}
                                                 onBlur={(e) => {
                                                     if(e.target.value !== u.password) handleSaveUser({...u, password: e.target.value});
                                                 }}
@@ -342,8 +445,13 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ users, content, onRefresh }) =>
 
                     <div className="p-6 border-t border-slate-700 bg-slate-900 flex justify-end gap-3">
                          <button onClick={() => setEditingSession(null)} className="px-6 py-2 rounded-lg text-slate-400 hover:text-white font-bold">Cancelar</button>
-                         <button onClick={handleSaveSession} className="px-8 py-2 bg-primary hover:bg-blue-600 text-white rounded-lg font-bold flex items-center gap-2">
-                             <Save size={18} /> Guardar Cambios
+                         <button 
+                             onClick={handleSaveSession} 
+                             disabled={isSaving}
+                             className={`px-8 py-2 bg-primary hover:bg-blue-600 text-white rounded-lg font-bold flex items-center gap-2 ${isSaving ? 'opacity-50 cursor-not-allowed' : ''}`}
+                         >
+                             {isSaving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} 
+                             {isSaving ? 'Guardando...' : 'Guardar Cambios'}
                          </button>
                     </div>
                 </div>
