@@ -2,7 +2,7 @@
 import React, { useState, useRef } from 'react';
 import { User, WeekData, ClassSession } from '../types';
 import { updateUser, deleteUser, createUser, updateSession } from '../services/dataService';
-import { Save, Search, Database, Lock, Edit2, Users, Trash2, Plus, X, Video, Loader2, HardDrive, Download, Upload, AlertTriangle } from 'lucide-react';
+import { Save, Search, Database, Lock, Edit2, Users, Trash2, Plus, X, Video, Loader2, HardDrive, Download, Upload, AlertTriangle, ShieldCheck, Mail, Type } from 'lucide-react';
 
 interface AdminPanelProps {
   users: User[]; 
@@ -13,89 +13,113 @@ interface AdminPanelProps {
 const AdminPanel: React.FC<AdminPanelProps> = ({ users, content, onRefresh }) => {
   const [activeTab, setActiveTab] = useState<'users' | 'content' | 'backup'>('users');
   
-  // USER STATE
+  // --- USER MANAGEMENT STATE ---
   const [searchTerm, setSearchTerm] = useState('');
-  const [isAddingUser, setIsAddingUser] = useState(false);
-  const [newUser, setNewUser] = useState<Partial<User>>({
-      name: '', email: '', role: 'Estudiante', password: '1234', stats: { prompting: 0, tools: 0, analysis: 0 }
-  });
+  const [userModalOpen, setUserModalOpen] = useState(false);
+  const [isEditingUser, setIsEditingUser] = useState(false);
+  const [currentUserData, setCurrentUserData] = useState<Partial<User>>({});
+  const [isProcessingUser, setIsProcessingUser] = useState(false);
 
-  // CONTENT STATE
+  // --- CONTENT MANAGEMENT STATE ---
   const [editingSession, setEditingSession] = useState<ClassSession | null>(null);
-  const [isSaving, setIsSaving] = useState(false);
+  const [isSavingSession, setIsSavingSession] = useState(false);
 
-  // BACKUP STATE
+  // --- BACKUP STATE ---
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // --- USER LOGIC ---
-  const handleSaveUser = async (u: User) => {
-      if(!confirm("¿Guardar cambios en usuario?")) return;
-      try {
-          await updateUser(u);
-          onRefresh();
-      } catch (e: any) {
-          alert("Error: " + e.message);
-      }
+  // ============================
+  // USER FUNCTIONS
+  // ============================
+
+  const openAddUser = () => {
+      setCurrentUserData({
+          name: '', email: '', role: 'Estudiante', password: '1234',
+          stats: { prompting: 0, tools: 0, analysis: 0 },
+          progress: { completed: 0, total: 12 }
+      });
+      setIsEditingUser(false);
+      setUserModalOpen(true);
+  };
+
+  const openEditUser = (user: User) => {
+      setCurrentUserData({ ...user });
+      setIsEditingUser(true);
+      setUserModalOpen(true);
   };
 
   const handleDeleteUser = async (email: string) => {
-      if(!confirm(`¿ELIMINAR USUARIO ${email}? Esta acción no se puede deshacer.`)) return;
+      if (!confirm(`¿Estás seguro de ELIMINAR al usuario ${email}? Esta acción es irreversible.`)) return;
       try {
           await deleteUser(email);
           onRefresh();
+          // alert("Usuario eliminado."); // Feedback visual suficiente con refresh
       } catch (e: any) {
           alert("Error: " + e.message);
       }
   };
 
-  const handleCreateUser = async () => {
-      if(!newUser.email || !newUser.name) return alert("Faltan datos");
+  const handleUserSubmit = async () => {
+      if (!currentUserData.email || !currentUserData.name) {
+          alert("El nombre y el correo son obligatorios.");
+          return;
+      }
+
+      setIsProcessingUser(true);
       try {
-          const u: User = {
-              id: newUser.email,
-              email: newUser.email,
-              name: newUser.name,
-              role: newUser.role || 'Estudiante',
-              password: newUser.password || '1234',
-              avatar: (newUser.name || 'A').charAt(0).toUpperCase(),
-              stats: { prompting: 50, tools: 50, analysis: 50 },
-              progress: { completed: 0, total: 12 },
-              progress_details: {}
-          };
-          await createUser(u);
-          setIsAddingUser(false);
-          setNewUser({ name: '', email: '', role: 'Estudiante', password: '1234' });
+          if (isEditingUser) {
+              // Update existing
+              await updateUser(currentUserData as User);
+          } else {
+              // Create new
+              const newUser: User = {
+                  id: currentUserData.email!, // Email as ID
+                  email: currentUserData.email!,
+                  name: currentUserData.name!,
+                  role: currentUserData.role || 'Estudiante',
+                  password: currentUserData.password || '1234',
+                  avatar: (currentUserData.name || 'A').charAt(0).toUpperCase(),
+                  stats: currentUserData.stats || { prompting: 50, tools: 50, analysis: 50 },
+                  progress: currentUserData.progress || { completed: 0, total: 12 },
+                  progress_details: {}
+              };
+              await createUser(newUser);
+          }
+          setUserModalOpen(false);
           onRefresh();
-          alert("Usuario creado correctamente.");
       } catch (e: any) {
-          alert("Error: " + e.message);
+          alert("Error al guardar usuario: " + e.message);
+      } finally {
+          setIsProcessingUser(false);
       }
   };
 
-  // --- CONTENT LOGIC ---
+  // ============================
+  // CONTENT FUNCTIONS
+  // ============================
+
   const handleSaveSession = async () => {
-      if(!editingSession) return;
-      
-      setIsSaving(true);
+      if (!editingSession) return;
+      setIsSavingSession(true);
       
       const success = await updateSession(editingSession);
       
-      setIsSaving(false);
-      
+      setIsSavingSession(false);
       if (success) {
           setEditingSession(null);
           onRefresh(); 
-          alert("✅ Contenido guardado en Base de Datos Interna.");
+          alert("✅ Contenido guardado correctamente.");
       } else {
-          alert("❌ Error al guardar.");
+          alert("❌ Error al guardar. Intente nuevamente.");
       }
   };
 
-  // --- BACKUP LOGIC ---
+  // ============================
+  // BACKUP FUNCTIONS
+  // ============================
   const handleExportDB = () => {
       const data = {
-          users: localStorage.getItem('afri_sys_users_v1'),
-          content: localStorage.getItem('afri_sys_content_v1'),
+          users: localStorage.getItem('afri_sys_users_backup'),
+          content: localStorage.getItem('afri_sys_content_backup'),
           timestamp: new Date().toISOString()
       };
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -117,18 +141,18 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ users, content, onRefresh }) =>
       reader.onload = (event) => {
           try {
               const data = JSON.parse(event.target?.result as string);
-              if (data.users && data.content) {
-                  if(confirm("⚠ ADVERTENCIA: Esto sobrescribirá TODOS los datos actuales con la copia de seguridad. ¿Estás seguro?")) {
-                      localStorage.setItem('afri_sys_users_v1', data.users);
-                      localStorage.setItem('afri_sys_content_v1', data.content);
-                      alert("✅ Base de Datos Restaurada con Éxito. El sistema se recargará.");
+              if (data.users || data.content) {
+                  if(confirm("⚠ ADVERTENCIA: Esto sobrescribirá TODOS los datos LOCALES. ¿Estás seguro?")) {
+                      if(data.users) localStorage.setItem('afri_sys_users_backup', data.users);
+                      if(data.content) localStorage.setItem('afri_sys_content_backup', data.content);
+                      alert("✅ Datos restaurados. La página se recargará.");
                       window.location.reload();
                   }
               } else {
-                  alert("❌ Archivo de respaldo inválido.");
+                  alert("❌ Archivo inválido.");
               }
           } catch (err) {
-              alert("❌ Error leyendo el archivo.");
+              alert("❌ Error leyendo archivo.");
           }
       };
       reader.readAsText(file);
@@ -148,76 +172,22 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ users, content, onRefresh }) =>
                 <Database className="text-cobol" /> PANEL MASTER ROOT
             </h1>
             <p className="text-slate-400 relative z-10 flex items-center gap-2 font-mono text-sm">
-                <HardDrive size={14} className="text-cobol"/> BASE DE DATOS INTERNA: <span className="text-cobol font-bold">ACTIVA</span>
+                <HardDrive size={14} className="text-cobol"/> BASE DE DATOS: <span className="text-cobol font-bold">CONTROL TOTAL</span>
             </p>
         </div>
 
         {/* Tabs */}
         <div className="flex gap-4 mb-6 flex-wrap">
-            <button 
-                onClick={() => setActiveTab('users')}
-                className={`px-6 py-3 rounded-xl font-bold flex items-center gap-2 transition-all shadow-lg ${activeTab === 'users' ? 'bg-primary text-white scale-105' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
-            >
+            <button onClick={() => setActiveTab('users')} className={`px-6 py-3 rounded-xl font-bold flex items-center gap-2 transition-all shadow-lg ${activeTab === 'users' ? 'bg-primary text-white scale-105' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>
                 <Users size={18} /> Usuarios
             </button>
-            <button 
-                onClick={() => setActiveTab('content')}
-                className={`px-6 py-3 rounded-xl font-bold flex items-center gap-2 transition-all shadow-lg ${activeTab === 'content' ? 'bg-secondary text-white scale-105' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
-            >
+            <button onClick={() => setActiveTab('content')} className={`px-6 py-3 rounded-xl font-bold flex items-center gap-2 transition-all shadow-lg ${activeTab === 'content' ? 'bg-secondary text-white scale-105' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>
                 <Video size={18} /> Contenidos
             </button>
-            <button 
-                onClick={() => setActiveTab('backup')}
-                className={`px-6 py-3 rounded-xl font-bold flex items-center gap-2 transition-all shadow-lg ml-auto ${activeTab === 'backup' ? 'bg-cobol text-black scale-105' : 'bg-slate-800 text-cobol border border-cobol/30 hover:bg-slate-700'}`}
-            >
-                <Database size={18} /> Copia de Seguridad
+            <button onClick={() => setActiveTab('backup')} className={`px-6 py-3 rounded-xl font-bold flex items-center gap-2 transition-all shadow-lg ml-auto ${activeTab === 'backup' ? 'bg-cobol text-black scale-105' : 'bg-slate-800 text-cobol border border-cobol/30 hover:bg-slate-700'}`}>
+                <Database size={18} /> Respaldo
             </button>
         </div>
-
-        {/* --- TAB: BACKUP --- */}
-        {activeTab === 'backup' && (
-            <div className="bg-surface border border-slate-700 rounded-2xl p-8 shadow-xl max-w-3xl mx-auto">
-                <div className="flex items-start gap-4 mb-8">
-                     <div className="p-4 bg-yellow-500/10 rounded-2xl border border-yellow-500/30 text-yellow-500">
-                         <AlertTriangle size={32} />
-                     </div>
-                     <div>
-                         <h3 className="text-xl font-bold text-white mb-2">Gestión de Persistencia de Datos</h3>
-                         <p className="text-slate-400 leading-relaxed">
-                             Al usar la Base de Datos Interna de Google (Local Storage), los datos viven en el navegador. 
-                             Si realizas un nuevo deploy en Google Cloud, es recomendable <strong>Exportar</strong> tu base de datos antes y <strong>Restaurarla</strong> después para no perder cambios recientes.
-                         </p>
-                     </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    <div className="bg-slate-900 p-6 rounded-xl border border-slate-700 flex flex-col items-center text-center hover:border-cobol/50 transition-colors">
-                        <Download size={48} className="text-cobol mb-4" />
-                        <h4 className="font-bold text-white text-lg mb-2">Exportar Base de Datos</h4>
-                        <p className="text-sm text-slate-500 mb-6">Descarga un archivo JSON con todos los usuarios y contenidos actuales.</p>
-                        <button onClick={handleExportDB} className="w-full py-3 bg-cobol hover:bg-green-400 text-black font-bold rounded-lg transition-colors">
-                            Descargar Respaldo
-                        </button>
-                    </div>
-
-                    <div className="bg-slate-900 p-6 rounded-xl border border-slate-700 flex flex-col items-center text-center hover:border-primary/50 transition-colors">
-                        <Upload size={48} className="text-primary mb-4" />
-                        <h4 className="font-bold text-white text-lg mb-2">Restaurar Base de Datos</h4>
-                        <p className="text-sm text-slate-500 mb-6">Sube un archivo JSON previamente exportado para recuperar tus datos.</p>
-                        <input 
-                            type="file" 
-                            ref={fileInputRef} 
-                            onChange={handleImportDB} 
-                            accept=".json" 
-                            className="hidden" 
-                        />
-                        <button onClick={() => fileInputRef.current?.click()} className="w-full py-3 bg-primary hover:bg-blue-600 text-white font-bold rounded-lg transition-colors">
-                            Subir Respaldo
-                        </button>
-                    </div>
-                </div>
-            </div>
-        )}
 
         {/* --- TAB: USUARIOS --- */}
         {activeTab === 'users' && (
@@ -233,10 +203,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ users, content, onRefresh }) =>
                             className="w-full bg-black border border-slate-700 rounded-lg pl-10 pr-4 py-2 text-sm text-white focus:border-primary focus:outline-none"
                         />
                     </div>
-                    <button 
-                        onClick={() => setIsAddingUser(true)}
-                        className="bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 text-sm"
-                    >
+                    <button onClick={openAddUser} className="bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 text-sm transition-transform hover:scale-105">
                         <Plus size={16} /> Agregar Usuario
                     </button>
                 </div>
@@ -247,14 +214,14 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ users, content, onRefresh }) =>
                             <tr className="bg-slate-950 text-slate-400 text-xs uppercase tracking-wider">
                                 <th className="p-4">Usuario</th>
                                 <th className="p-4">Rol</th>
-                                <th className="p-4">Contraseña</th>
+                                <th className="p-4">Password</th>
                                 <th className="p-4">Progreso</th>
                                 <th className="p-4 text-right">Acciones</th>
                             </tr>
                         </thead>
                         <tbody className="text-sm text-slate-300">
                             {filteredUsers.map(u => (
-                                <tr key={u.id} className="border-b border-slate-800/50 hover:bg-white/5 transition-colors">
+                                <tr key={u.email} className="border-b border-slate-800/50 hover:bg-white/5 transition-colors">
                                     <td className="p-4">
                                         <div className="flex items-center gap-3">
                                             <div className="w-10 h-10 rounded-lg bg-slate-800 flex items-center justify-center font-bold text-white border border-slate-700">
@@ -267,89 +234,125 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ users, content, onRefresh }) =>
                                         </div>
                                     </td>
                                     <td className="p-4">
-                                        <select 
-                                            value={u.role}
-                                            onChange={(e) => handleSaveUser({...u, role: e.target.value})}
-                                            className="bg-black border border-slate-700 rounded px-2 py-1 text-xs focus:border-primary outline-none"
-                                        >
-                                            <option value="Estudiante">Estudiante</option>
-                                            <option value="Master Root">Master Root</option>
-                                        </select>
+                                        <span className={`px-2 py-1 rounded text-xs font-bold ${u.role === 'Master Root' ? 'bg-red-500/20 text-red-400' : 'bg-blue-500/20 text-blue-400'}`}>
+                                            {u.role}
+                                        </span>
                                     </td>
-                                    <td className="p-4">
-                                        <div className="flex items-center gap-2">
-                                            <Lock size={12} className="text-slate-500" />
-                                            <input 
-                                                type="text" 
-                                                value={u.password || ''}
-                                                onChange={() => {}} 
-                                                onBlur={(e) => {
-                                                    if(e.target.value !== u.password) handleSaveUser({...u, password: e.target.value});
-                                                }}
-                                                className="bg-transparent border-b border-transparent focus:border-primary outline-none w-24 text-slate-400 focus:text-white"
-                                            />
-                                        </div>
+                                    <td className="p-4 font-mono text-xs text-slate-500">
+                                        {u.password || '****'}
                                     </td>
                                     <td className="p-4">
                                         <div className="w-full bg-slate-800 rounded-full h-1.5 w-24">
                                             <div className="bg-primary h-1.5 rounded-full" style={{width: `${(u.progress.completed/12)*100}%`}}></div>
                                         </div>
-                                        <span className="text-[10px] text-slate-500">{u.progress.completed}/12</span>
                                     </td>
                                     <td className="p-4 text-right">
-                                        <button 
-                                            onClick={() => handleDeleteUser(u.email)}
-                                            className="text-slate-500 hover:text-red-500 p-2 transition-colors"
-                                            title="Eliminar Usuario"
-                                        >
-                                            <Trash2 size={16} />
-                                        </button>
+                                        <div className="flex justify-end gap-2">
+                                            <button 
+                                                onClick={() => openEditUser(u)}
+                                                className="p-2 bg-slate-800 hover:bg-blue-600 hover:text-white rounded-lg text-slate-400 transition-colors"
+                                                title="Editar Usuario Completo"
+                                            >
+                                                <Edit2 size={16} />
+                                            </button>
+                                            <button 
+                                                onClick={() => handleDeleteUser(u.email)}
+                                                className="p-2 bg-slate-800 hover:bg-red-600 hover:text-white rounded-lg text-slate-400 transition-colors"
+                                                title="Eliminar Usuario"
+                                            >
+                                                <Trash2 size={16} />
+                                            </button>
+                                        </div>
                                     </td>
                                 </tr>
                             ))}
                         </tbody>
                     </table>
                 </div>
+            </div>
+        )}
 
-                {isAddingUser && (
-                    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-                        <div className="bg-surface border border-slate-600 p-8 rounded-2xl w-full max-w-md shadow-2xl">
-                            <h3 className="text-xl font-bold text-white mb-6">Nuevo Usuario</h3>
-                            <div className="space-y-4">
+        {/* --- USER MODAL (ADD & EDIT) --- */}
+        {userModalOpen && (
+            <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4 backdrop-blur-sm animate-in fade-in duration-200">
+                <div className="bg-surface border border-slate-600 p-8 rounded-2xl w-full max-w-lg shadow-2xl relative">
+                    <button onClick={() => setUserModalOpen(false)} className="absolute top-4 right-4 text-slate-500 hover:text-white"><X /></button>
+                    
+                    <h3 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
+                        {isEditingUser ? <Edit2 className="text-primary"/> : <Plus className="text-green-500"/>}
+                        {isEditingUser ? 'Editar Usuario' : 'Nuevo Usuario'}
+                    </h3>
+                    
+                    <div className="space-y-5">
+                        <div>
+                            <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Nombre Completo</label>
+                            <div className="relative">
+                                <Type className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
                                 <input 
-                                    className="w-full bg-slate-900 border border-slate-700 p-3 rounded-lg text-white" 
-                                    placeholder="Nombre Completo" 
-                                    value={newUser.name}
-                                    onChange={e => setNewUser({...newUser, name: e.target.value})}
+                                    className="w-full bg-black border border-slate-700 p-3 pl-10 rounded-lg text-white focus:border-primary outline-none" 
+                                    value={currentUserData.name}
+                                    onChange={e => setCurrentUserData({...currentUserData, name: e.target.value})}
+                                    placeholder="Ej: Juan Pérez"
                                 />
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Correo Electrónico (ID)</label>
+                            <div className="relative">
+                                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
                                 <input 
-                                    className="w-full bg-slate-900 border border-slate-700 p-3 rounded-lg text-white" 
-                                    placeholder="Email" 
-                                    value={newUser.email}
-                                    onChange={e => setNewUser({...newUser, email: e.target.value})}
+                                    className={`w-full bg-black border border-slate-700 p-3 pl-10 rounded-lg text-white focus:border-primary outline-none ${isEditingUser ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                    value={currentUserData.email}
+                                    onChange={e => setCurrentUserData({...currentUserData, email: e.target.value})}
+                                    placeholder="usuario@aiwis.cl"
+                                    disabled={isEditingUser} // ID cannot be changed in simple mode
                                 />
-                                <select 
-                                    className="w-full bg-slate-900 border border-slate-700 p-3 rounded-lg text-white"
-                                    value={newUser.role}
-                                    onChange={e => setNewUser({...newUser, role: e.target.value})}
-                                >
-                                    <option>Estudiante</option>
-                                    <option>Master Root</option>
-                                </select>
-                                <input 
-                                    className="w-full bg-slate-900 border border-slate-700 p-3 rounded-lg text-white" 
-                                    placeholder="Contraseña (Default: 1234)" 
-                                    value={newUser.password}
-                                    onChange={e => setNewUser({...newUser, password: e.target.value})}
-                                />
-                                <div className="flex gap-3 pt-4">
-                                    <button onClick={() => handleCreateUser()} className="flex-1 bg-primary text-white py-3 rounded-lg font-bold hover:opacity-90">Crear</button>
-                                    <button onClick={() => setIsAddingUser(false)} className="flex-1 bg-slate-800 text-white py-3 rounded-lg font-bold hover:bg-slate-700">Cancelar</button>
+                            </div>
+                            {isEditingUser && <p className="text-[10px] text-yellow-500 mt-1">El email es el identificador único y no se puede cambiar.</p>}
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Rol</label>
+                                <div className="relative">
+                                    <ShieldCheck className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
+                                    <select 
+                                        className="w-full bg-black border border-slate-700 p-3 pl-10 rounded-lg text-white focus:border-primary outline-none appearance-none"
+                                        value={currentUserData.role}
+                                        onChange={e => setCurrentUserData({...currentUserData, role: e.target.value})}
+                                    >
+                                        <option value="Estudiante">Estudiante</option>
+                                        <option value="Master Root">Master Root</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Contraseña</label>
+                                <div className="relative">
+                                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
+                                    <input 
+                                        className="w-full bg-black border border-slate-700 p-3 pl-10 rounded-lg text-white focus:border-primary outline-none" 
+                                        value={currentUserData.password}
+                                        onChange={e => setCurrentUserData({...currentUserData, password: e.target.value})}
+                                    />
                                 </div>
                             </div>
                         </div>
+
+                        <div className="flex gap-3 pt-6 border-t border-slate-700 mt-4">
+                            <button onClick={() => setUserModalOpen(false)} className="flex-1 bg-slate-800 text-white py-3 rounded-lg font-bold hover:bg-slate-700 transition-colors">Cancelar</button>
+                            <button 
+                                onClick={handleUserSubmit} 
+                                disabled={isProcessingUser}
+                                className="flex-1 bg-gradient-to-r from-primary to-blue-600 text-white py-3 rounded-lg font-bold hover:opacity-90 transition-colors flex justify-center items-center gap-2"
+                            >
+                                {isProcessingUser && <Loader2 className="animate-spin" size={18} />}
+                                {isProcessingUser ? 'Guardando...' : 'Guardar Usuario'}
+                            </button>
+                        </div>
                     </div>
-                )}
+                </div>
             </div>
         )}
 
@@ -456,12 +459,46 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ users, content, onRefresh }) =>
                          <button onClick={() => setEditingSession(null)} className="px-6 py-2 rounded-lg text-slate-400 hover:text-white font-bold">Cancelar</button>
                          <button 
                              onClick={handleSaveSession} 
-                             disabled={isSaving}
-                             className={`px-8 py-2 bg-primary hover:bg-blue-600 text-white rounded-lg font-bold flex items-center gap-2 ${isSaving ? 'opacity-50 cursor-not-allowed' : ''}`}
+                             disabled={isSavingSession}
+                             className={`px-8 py-2 bg-primary hover:bg-blue-600 text-white rounded-lg font-bold flex items-center gap-2 ${isSavingSession ? 'opacity-50 cursor-not-allowed' : ''}`}
                          >
-                             {isSaving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} 
-                             {isSaving ? 'Guardando...' : 'Guardar Cambios'}
+                             {isSavingSession ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} 
+                             {isSavingSession ? 'Guardando...' : 'Guardar Cambios'}
                          </button>
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {/* --- TAB: BACKUP --- */}
+        {activeTab === 'backup' && (
+            <div className="bg-surface border border-slate-700 rounded-2xl p-8 shadow-xl max-w-3xl mx-auto">
+                 <div className="flex items-start gap-4 mb-8">
+                     <div className="p-4 bg-yellow-500/10 rounded-2xl border border-yellow-500/30 text-yellow-500">
+                         <AlertTriangle size={32} />
+                     </div>
+                     <div>
+                         <h3 className="text-xl font-bold text-white mb-2">Gestión de Respaldo</h3>
+                         <p className="text-slate-400 leading-relaxed">
+                             Descarga una copia de seguridad local. Útil si vas a migrar o reiniciar el sistema.
+                         </p>
+                     </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div className="bg-slate-900 p-6 rounded-xl border border-slate-700 flex flex-col items-center text-center hover:border-cobol/50 transition-colors">
+                        <Download size={48} className="text-cobol mb-4" />
+                        <h4 className="font-bold text-white text-lg mb-2">Exportar</h4>
+                        <button onClick={handleExportDB} className="w-full py-3 bg-cobol hover:bg-green-400 text-black font-bold rounded-lg transition-colors">
+                            Descargar JSON
+                        </button>
+                    </div>
+                    <div className="bg-slate-900 p-6 rounded-xl border border-slate-700 flex flex-col items-center text-center hover:border-primary/50 transition-colors">
+                        <Upload size={48} className="text-primary mb-4" />
+                        <h4 className="font-bold text-white text-lg mb-2">Importar</h4>
+                        <input type="file" ref={fileInputRef} onChange={handleImportDB} accept=".json" className="hidden" />
+                        <button onClick={() => fileInputRef.current?.click()} className="w-full py-3 bg-primary hover:bg-blue-600 text-white font-bold rounded-lg transition-colors">
+                            Subir JSON
+                        </button>
                     </div>
                 </div>
             </div>
