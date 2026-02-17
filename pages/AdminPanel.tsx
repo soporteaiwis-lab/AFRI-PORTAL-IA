@@ -1,175 +1,196 @@
-import React, { useState } from 'react';
-import { User } from '../types';
-import { VideoMap, adminUpdateCell } from '../services/dataService';
-import { Save, Search, Database, PlayCircle, Lock, Edit2, Users, Grid } from 'lucide-react';
+
+import React, { useState, useEffect } from 'react';
+import { User, WeekData, ClassSession } from '../types';
+import { updateUser, deleteUser, createUser, updateSession } from '../services/dataService';
+import { Save, Search, Database, PlayCircle, Lock, Edit2, Users, Trash2, Plus, X, Video, FileText, Check } from 'lucide-react';
 
 interface AdminPanelProps {
-  users: User[];
-  videos: VideoMap;
+  users: User[]; // Estos vienen de App.tsx que ya los carga de Firebase
+  content: WeekData[]; // Necesitamos pasar el contenido también
+  onRefresh: () => void; // Para recargar datos después de editar
 }
 
-const AdminPanel: React.FC<AdminPanelProps> = ({ users, videos }) => {
-  const [activeTab, setActiveTab] = useState<'users' | 'videos'>('users');
+const AdminPanel: React.FC<AdminPanelProps> = ({ users, content, onRefresh }) => {
+  const [activeTab, setActiveTab] = useState<'users' | 'content'>('users');
+  
+  // USER STATE
   const [searchTerm, setSearchTerm] = useState('');
-  const [editingCell, setEditingCell] = useState<{id: string, field: string} | null>(null);
-  const [tempValue, setTempValue] = useState('');
+  const [isAddingUser, setIsAddingUser] = useState(false);
+  const [newUser, setNewUser] = useState<Partial<User>>({
+      name: '', email: '', role: 'Estudiante', password: '1234', stats: { prompting: 0, tools: 0, analysis: 0 }
+  });
 
-  // --- LOGIC FOR USERS ---
-  const handleUserEdit = async (email: string, field: 'name' | 'role' | 'password', newValue: string) => {
-      // Optimistic update logic would go here if we had global state access easily, 
-      // but for admin panel we just push to cloud.
-      
-      let colIndex = 0;
-      if (field === 'name') colIndex = 2; // Col B
-      if (field === 'role') colIndex = 3; // Col C
-      if (field === 'password') colIndex = 4; // Col D (Assuming Pass is here)
+  // CONTENT STATE
+  const [editingSession, setEditingSession] = useState<ClassSession | null>(null);
 
-      if (colIndex > 0) {
-          await adminUpdateCell('Usuarios3', email, colIndex, newValue);
-          alert(`Dato actualizado. La sincronización puede tardar unos segundos.`);
-          setEditingCell(null);
+  // --- USER LOGIC ---
+  const handleSaveUser = async (u: User) => {
+      if(!confirm("¿Guardar cambios en usuario?")) return;
+      await updateUser(u);
+      onRefresh();
+  };
+
+  const handleDeleteUser = async (email: string) => {
+      if(!confirm(`¿ELIMINAR USUARIO ${email}? Esta acción no se puede deshacer.`)) return;
+      await deleteUser(email);
+      onRefresh();
+  };
+
+  const handleCreateUser = async () => {
+      if(!newUser.email || !newUser.name) return alert("Faltan datos");
+      try {
+          const u: User = {
+              id: newUser.email, // ID temporal
+              email: newUser.email,
+              name: newUser.name,
+              role: newUser.role || 'Estudiante',
+              password: newUser.password || '1234',
+              avatar: newUser.name.charAt(0).toUpperCase(),
+              stats: { prompting: 50, tools: 50, analysis: 50 },
+              progress: { completed: 0, total: 12 },
+              progress_details: {}
+          };
+          await createUser(u);
+          setIsAddingUser(false);
+          setNewUser({ name: '', email: '', role: 'Estudiante', password: '1234' });
+          onRefresh();
+      } catch (e: any) {
+          alert("Error: " + e.message);
       }
   };
 
-  const filteredUsers = users.filter(u => u.name.toLowerCase().includes(searchTerm.toLowerCase()));
-
-  // --- LOGIC FOR VIDEOS ---
-  // Transform VideoMap to Array for editing
-  const videoList = Object.entries(videos).map(([key, url]) => ({ key, url }));
-  
-  const handleVideoEdit = async (key: string, newUrl: string) => {
-      // Key format: Week-Session (e.g. "1-1")
-      // We need to match this in the Sheet Videos3. 
-      // Assuming Videos3 structure: Col A=ID(empty), Col B=Week, Col C=Class, Col D=URL
-      
-      // Since we don't have row ID easily mapped here without reading full sheet again, 
-      // we rely on the Apps Script loop finding the Week+Class combo.
-      // This is a simplification.
-      
-      await adminUpdateCell('Videos3', key, 4, newUrl); // Col D is 4
-      alert("URL de video actualizada.");
-      setEditingCell(null);
+  // --- CONTENT LOGIC ---
+  const handleSaveSession = async () => {
+      if(!editingSession) return;
+      await updateSession(editingSession);
+      setEditingSession(null);
+      onRefresh();
   };
 
+  const filteredUsers = users.filter(u => 
+      u.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+      u.email.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
   return (
-    <div className="animate-in fade-in pb-20 max-w-7xl mx-auto">
-        <div className="bg-gradient-to-r from-red-900/20 to-slate-900 border border-red-500/20 p-6 rounded-2xl mb-8">
-            <h1 className="text-3xl font-black text-red-500 mb-2 flex items-center gap-3">
-                <Database /> PANEL MASTER
+    <div className="animate-in fade-in pb-20 max-w-7xl mx-auto px-4">
+        {/* Header */}
+        <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border-b border-red-500/30 p-8 rounded-b-3xl mb-8 shadow-2xl relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-64 h-64 bg-red-500/10 rounded-full blur-[80px]"></div>
+            <h1 className="text-4xl font-black text-red-500 mb-2 flex items-center gap-3 relative z-10">
+                <Database className="animate-pulse" /> PANEL MASTER ROOT
             </h1>
-            <p className="text-slate-400">Administración de Base de Datos en Tiempo Real. Ten cuidado, los cambios afectan a todos.</p>
+            <p className="text-slate-400 relative z-10">
+                Control Total del Sistema AFRI. Base de Datos: <span className="text-green-400 font-mono">FIREBASE FIRESTORE</span>
+            </p>
         </div>
 
+        {/* Tabs */}
         <div className="flex gap-4 mb-6">
             <button 
                 onClick={() => setActiveTab('users')}
-                className={`px-6 py-3 rounded-xl font-bold flex items-center gap-2 ${activeTab === 'users' ? 'bg-white text-black' : 'bg-slate-800 text-slate-400'}`}
+                className={`px-8 py-4 rounded-xl font-bold flex items-center gap-2 transition-all shadow-lg ${activeTab === 'users' ? 'bg-primary text-white scale-105' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
             >
-                <Users size={18} /> Usuarios ({users.length})
+                <Users size={20} /> Usuarios
             </button>
             <button 
-                onClick={() => setActiveTab('videos')}
-                className={`px-6 py-3 rounded-xl font-bold flex items-center gap-2 ${activeTab === 'videos' ? 'bg-white text-black' : 'bg-slate-800 text-slate-400'}`}
+                onClick={() => setActiveTab('content')}
+                className={`px-8 py-4 rounded-xl font-bold flex items-center gap-2 transition-all shadow-lg ${activeTab === 'content' ? 'bg-secondary text-white scale-105' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
             >
-                <PlayCircle size={18} /> Videos / Clases
+                <Video size={20} /> Contenidos & Clases
             </button>
         </div>
 
+        {/* --- TAB: USUARIOS --- */}
         {activeTab === 'users' && (
-            <div className="bg-surface border border-slate-700 rounded-2xl overflow-hidden">
-                <div className="p-4 border-b border-slate-700 bg-slate-900/50">
-                    <div className="relative max-w-md">
+            <div className="bg-surface border border-slate-700 rounded-2xl overflow-hidden shadow-xl">
+                <div className="p-4 border-b border-slate-700 bg-slate-900/50 flex justify-between items-center flex-wrap gap-4">
+                    <div className="relative max-w-md w-full">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
                         <input 
                             type="text" 
-                            placeholder="Buscar usuario..." 
+                            placeholder="Buscar por nombre o correo..." 
                             value={searchTerm}
                             onChange={e => setSearchTerm(e.target.value)}
-                            className="w-full bg-black border border-slate-700 rounded-lg pl-10 pr-4 py-2 text-sm text-white"
+                            className="w-full bg-black border border-slate-700 rounded-lg pl-10 pr-4 py-2 text-sm text-white focus:border-primary focus:outline-none"
                         />
                     </div>
+                    <button 
+                        onClick={() => setIsAddingUser(true)}
+                        className="bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 text-sm"
+                    >
+                        <Plus size={16} /> Agregar Usuario
+                    </button>
                 </div>
+                
+                {/* User Table */}
                 <div className="overflow-x-auto">
                     <table className="w-full text-left border-collapse">
                         <thead>
-                            <tr className="bg-slate-900 text-slate-500 text-xs uppercase tracking-wider">
-                                <th className="p-4 border-b border-slate-800">Avatar</th>
-                                <th className="p-4 border-b border-slate-800">Email (ID)</th>
-                                <th className="p-4 border-b border-slate-800">Nombre</th>
-                                <th className="p-4 border-b border-slate-800">Rol</th>
-                                <th className="p-4 border-b border-slate-800">Password</th>
-                                <th className="p-4 border-b border-slate-800">Acciones</th>
+                            <tr className="bg-slate-950 text-slate-400 text-xs uppercase tracking-wider">
+                                <th className="p-4">Usuario</th>
+                                <th className="p-4">Rol</th>
+                                <th className="p-4">Contraseña</th>
+                                <th className="p-4">Progreso</th>
+                                <th className="p-4 text-right">Acciones</th>
                             </tr>
                         </thead>
-                        <tbody className="text-sm text-slate-300 font-mono">
+                        <tbody className="text-sm text-slate-300">
                             {filteredUsers.map(u => (
-                                <tr key={u.id} className="border-b border-slate-800/50 hover:bg-white/5">
+                                <tr key={u.id} className="border-b border-slate-800/50 hover:bg-white/5 transition-colors">
                                     <td className="p-4">
-                                        <div className="w-8 h-8 rounded bg-slate-700 flex items-center justify-center font-bold text-white">
-                                            {u.avatar}
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-10 h-10 rounded-lg bg-slate-800 flex items-center justify-center font-bold text-white border border-slate-700">
+                                                {u.avatar}
+                                            </div>
+                                            <div>
+                                                <div className="font-bold text-white">{u.name}</div>
+                                                <div className="text-xs text-slate-500 font-mono">{u.email}</div>
+                                            </div>
                                         </div>
                                     </td>
-                                    <td className="p-4 text-slate-500">{u.email}</td>
-                                    
-                                    {/* NAME EDIT */}
                                     <td className="p-4">
-                                        {editingCell?.id === u.id && editingCell.field === 'name' ? (
-                                            <div className="flex gap-2">
-                                                <input 
-                                                    autoFocus
-                                                    className="bg-black border border-primary p-1 rounded w-32"
-                                                    value={tempValue} 
-                                                    onChange={e => setTempValue(e.target.value)} 
-                                                />
-                                                <button onClick={() => handleUserEdit(u.email, 'name', tempValue)} className="text-green-500"><Save size={16}/></button>
-                                            </div>
-                                        ) : (
-                                            <div className="flex items-center gap-2 group cursor-pointer" onClick={() => { setEditingCell({id: u.id, field: 'name'}); setTempValue(u.name); }}>
-                                                {u.name} <Edit2 size={12} className="opacity-0 group-hover:opacity-50" />
-                                            </div>
-                                        )}
+                                        <select 
+                                            value={u.role}
+                                            onChange={(e) => handleSaveUser({...u, role: e.target.value})}
+                                            className="bg-black border border-slate-700 rounded px-2 py-1 text-xs focus:border-primary outline-none"
+                                        >
+                                            <option value="Estudiante">Estudiante</option>
+                                            <option value="Master Root">Master Root</option>
+                                            <option value="Profesor">Profesor</option>
+                                        </select>
                                     </td>
-
-                                    {/* ROLE EDIT */}
                                     <td className="p-4">
-                                        {editingCell?.id === u.id && editingCell.field === 'role' ? (
-                                            <div className="flex gap-2">
-                                                <input 
-                                                    className="bg-black border border-primary p-1 rounded w-32"
-                                                    value={tempValue} 
-                                                    onChange={e => setTempValue(e.target.value)} 
-                                                />
-                                                <button onClick={() => handleUserEdit(u.email, 'role', tempValue)} className="text-green-500"><Save size={16}/></button>
-                                            </div>
-                                        ) : (
-                                            <div className="flex items-center gap-2 group cursor-pointer" onClick={() => { setEditingCell({id: u.id, field: 'role'}); setTempValue(u.role); }}>
-                                                <span className="bg-slate-800 px-2 py-1 rounded text-xs">{u.role}</span>
-                                                <Edit2 size={12} className="opacity-0 group-hover:opacity-50" />
-                                            </div>
-                                        )}
+                                        <div className="flex items-center gap-2">
+                                            <Lock size={12} className="text-slate-500" />
+                                            <input 
+                                                type="text" 
+                                                value={u.password || ''}
+                                                onChange={(e) => {
+                                                    // This needs local state to handle typing, but for rapid admin panel direct update on blur is okay or enter
+                                                    // For simplicity, we create a prompt or just let it be strictly managed via a dedicated edit button in real app.
+                                                    // Here we'll use a prompt for safety
+                                                }}
+                                                onBlur={(e) => {
+                                                    if(e.target.value !== u.password) handleSaveUser({...u, password: e.target.value});
+                                                }}
+                                                className="bg-transparent border-b border-transparent focus:border-primary outline-none w-24 text-slate-400 focus:text-white"
+                                            />
+                                        </div>
                                     </td>
-
-                                    {/* PASSWORD EDIT */}
                                     <td className="p-4">
-                                         {editingCell?.id === u.id && editingCell.field === 'password' ? (
-                                            <div className="flex gap-2">
-                                                <input 
-                                                    className="bg-black border border-primary p-1 rounded w-24"
-                                                    value={tempValue} 
-                                                    onChange={e => setTempValue(e.target.value)} 
-                                                />
-                                                <button onClick={() => handleUserEdit(u.email, 'password', tempValue)} className="text-green-500"><Save size={16}/></button>
-                                            </div>
-                                        ) : (
-                                            <div className="flex items-center gap-2 group cursor-pointer text-slate-600" onClick={() => { setEditingCell({id: u.id, field: 'password'}); setTempValue(u.password || '1234'); }}>
-                                                •••••• <Edit2 size={12} className="opacity-0 group-hover:opacity-50" />
-                                            </div>
-                                        )}
+                                        <div className="w-full bg-slate-800 rounded-full h-1.5 w-24">
+                                            <div className="bg-primary h-1.5 rounded-full" style={{width: `${(u.progress.completed/12)*100}%`}}></div>
+                                        </div>
+                                        <span className="text-[10px] text-slate-500">{u.progress.completed}/12</span>
                                     </td>
-
-                                    <td className="p-4">
-                                        <button className="text-slate-500 hover:text-white" title="Simular usuario">
-                                            <PlayCircle size={16} />
+                                    <td className="p-4 text-right">
+                                        <button 
+                                            onClick={() => handleDeleteUser(u.email)}
+                                            className="text-slate-500 hover:text-red-500 p-2 transition-colors"
+                                            title="Eliminar Usuario"
+                                        >
+                                            <Trash2 size={16} />
                                         </button>
                                     </td>
                                 </tr>
@@ -177,48 +198,156 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ users, videos }) => {
                         </tbody>
                     </table>
                 </div>
+
+                {/* Create User Modal */}
+                {isAddingUser && (
+                    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+                        <div className="bg-surface border border-slate-600 p-8 rounded-2xl w-full max-w-md shadow-2xl">
+                            <h3 className="text-xl font-bold text-white mb-6">Nuevo Usuario</h3>
+                            <div className="space-y-4">
+                                <input 
+                                    className="w-full bg-slate-900 border border-slate-700 p-3 rounded-lg text-white" 
+                                    placeholder="Nombre Completo" 
+                                    value={newUser.name}
+                                    onChange={e => setNewUser({...newUser, name: e.target.value})}
+                                />
+                                <input 
+                                    className="w-full bg-slate-900 border border-slate-700 p-3 rounded-lg text-white" 
+                                    placeholder="Email" 
+                                    value={newUser.email}
+                                    onChange={e => setNewUser({...newUser, email: e.target.value})}
+                                />
+                                <select 
+                                    className="w-full bg-slate-900 border border-slate-700 p-3 rounded-lg text-white"
+                                    value={newUser.role}
+                                    onChange={e => setNewUser({...newUser, role: e.target.value})}
+                                >
+                                    <option>Estudiante</option>
+                                    <option>Master Root</option>
+                                </select>
+                                <input 
+                                    className="w-full bg-slate-900 border border-slate-700 p-3 rounded-lg text-white" 
+                                    placeholder="Contraseña (Default: 1234)" 
+                                    value={newUser.password}
+                                    onChange={e => setNewUser({...newUser, password: e.target.value})}
+                                />
+                                <div className="flex gap-3 pt-4">
+                                    <button onClick={() => handleCreateUser()} className="flex-1 bg-primary text-white py-3 rounded-lg font-bold hover:opacity-90">Crear</button>
+                                    <button onClick={() => setIsAddingUser(false)} className="flex-1 bg-slate-800 text-white py-3 rounded-lg font-bold hover:bg-slate-700">Cancelar</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
         )}
 
-        {activeTab === 'videos' && (
-             <div className="bg-surface border border-slate-700 rounded-2xl overflow-hidden">
-                <table className="w-full text-left border-collapse">
-                    <thead>
-                         <tr className="bg-slate-900 text-slate-500 text-xs uppercase tracking-wider">
-                            <th className="p-4 border-b border-slate-800">Semana-Clase</th>
-                            <th className="p-4 border-b border-slate-800">YouTube URL / ID</th>
-                        </tr>
-                    </thead>
-                    <tbody className="text-sm text-slate-300 font-mono">
-                        {videoList.map((v) => (
-                            <tr key={v.key} className="border-b border-slate-800/50 hover:bg-white/5">
-                                <td className="p-4 font-bold text-white">{v.key}</td>
-                                <td className="p-4">
-                                    {editingCell?.id === v.key ? (
-                                        <div className="flex gap-2 w-full">
-                                            <input 
-                                                className="bg-black border border-primary p-2 rounded flex-1"
-                                                value={tempValue} 
-                                                onChange={e => setTempValue(e.target.value)} 
-                                            />
-                                            <button onClick={() => handleVideoEdit(v.key, tempValue)} className="bg-primary text-white px-3 rounded font-bold">GUARDAR</button>
-                                            <button onClick={() => setEditingCell(null)} className="text-slate-500 px-2">X</button>
+        {/* --- TAB: CONTENIDOS --- */}
+        {activeTab === 'content' && (
+            <div className="space-y-8">
+                {content.map(week => (
+                    <div key={week.id} className="bg-surface border border-slate-700 rounded-2xl overflow-hidden">
+                        <div className="bg-slate-900/80 p-4 border-b border-slate-700 flex justify-between items-center">
+                            <h3 className="font-bold text-white text-lg">Semana {week.id}: {week.title}</h3>
+                        </div>
+                        <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {week.sessions.map(session => (
+                                <div key={session.id} className="bg-black/40 border border-slate-800 p-4 rounded-xl hover:border-slate-600 transition-colors">
+                                    <div className="flex justify-between items-start mb-3">
+                                        <div>
+                                            <span className="text-[10px] uppercase text-primary font-bold">Sesión {session.sessionNumber}</span>
+                                            <h4 className="font-bold text-white">{session.title}</h4>
                                         </div>
-                                    ) : (
-                                        <div 
-                                            className="flex items-center gap-2 group cursor-pointer hover:bg-white/5 p-2 rounded border border-transparent hover:border-slate-700" 
-                                            onClick={() => { setEditingCell({id: v.key, field: 'url'}); setTempValue(v.url); }}
+                                        <button 
+                                            onClick={() => setEditingSession(session)}
+                                            className="p-2 bg-slate-800 hover:bg-primary hover:text-white rounded-lg text-slate-400 transition-colors"
                                         >
-                                            <span className="truncate max-w-md block text-slate-400">{v.url || '--- SIN VIDEO ---'}</span>
-                                            <Edit2 size={12} className="text-primary opacity-0 group-hover:opacity-100" />
-                                        </div>
-                                    )}
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-             </div>
+                                            <Edit2 size={16} />
+                                        </button>
+                                    </div>
+                                    <div className="text-xs text-slate-500 font-mono truncate mb-2">
+                                        URL: {session.videoUrl || '--- VACÍO ---'}
+                                    </div>
+                                    <div className="flex gap-2">
+                                        {session.transcript ? (
+                                            <span className="px-2 py-1 bg-green-500/10 text-green-500 text-[10px] rounded border border-green-500/20">Transcripción OK</span>
+                                        ) : (
+                                            <span className="px-2 py-1 bg-red-500/10 text-red-500 text-[10px] rounded border border-red-500/20">Sin Transcripción</span>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                ))}
+            </div>
+        )}
+
+        {/* --- EDIT SESSION MODAL --- */}
+        {editingSession && (
+            <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-50 p-4 backdrop-blur-sm overflow-y-auto">
+                <div className="bg-surface border border-slate-600 rounded-2xl w-full max-w-2xl shadow-2xl flex flex-col max-h-[90vh]">
+                    <div className="p-6 border-b border-slate-700 flex justify-between items-center bg-slate-900">
+                        <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                            <Edit2 size={20} /> Editar Sesión {editingSession.sessionNumber}
+                        </h3>
+                        <button onClick={() => setEditingSession(null)} className="text-slate-400 hover:text-white"><X /></button>
+                    </div>
+                    
+                    <div className="p-8 overflow-y-auto space-y-6">
+                        <div>
+                            <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Título de la Clase</label>
+                            <input 
+                                className="w-full bg-black border border-slate-700 p-3 rounded-lg text-white focus:border-primary outline-none" 
+                                value={editingSession.title}
+                                onChange={e => setEditingSession({...editingSession, title: e.target.value})}
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Video ID (YouTube) o URL</label>
+                            <div className="flex gap-2">
+                                <div className="bg-slate-800 p-3 rounded-lg text-slate-500"><Video size={18} /></div>
+                                <input 
+                                    className="w-full bg-black border border-slate-700 p-3 rounded-lg text-white focus:border-primary outline-none font-mono text-sm" 
+                                    value={editingSession.videoUrl}
+                                    placeholder="Ej: dQw4w9WgXcQ"
+                                    onChange={e => setEditingSession({...editingSession, videoUrl: e.target.value})}
+                                />
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Descripción</label>
+                            <textarea 
+                                className="w-full bg-black border border-slate-700 p-3 rounded-lg text-white focus:border-primary outline-none h-24 text-sm" 
+                                value={editingSession.description}
+                                onChange={e => setEditingSession({...editingSession, description: e.target.value})}
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-xs font-bold text-slate-400 uppercase mb-1 flex justify-between">
+                                <span>Transcripción (Markdown / Texto)</span>
+                                <span className="text-[10px] bg-slate-800 px-2 rounded text-slate-300">Pegar aquí el texto completo</span>
+                            </label>
+                            <textarea 
+                                className="w-full bg-black border border-slate-700 p-3 rounded-lg text-white focus:border-primary outline-none h-48 font-mono text-xs leading-relaxed" 
+                                value={editingSession.transcript || ''}
+                                placeholder="# Título de la clase&#10;Aquí va el texto de lo que se habló en el video..."
+                                onChange={e => setEditingSession({...editingSession, transcript: e.target.value})}
+                            />
+                        </div>
+                    </div>
+
+                    <div className="p-6 border-t border-slate-700 bg-slate-900 flex justify-end gap-3">
+                         <button onClick={() => setEditingSession(null)} className="px-6 py-2 rounded-lg text-slate-400 hover:text-white font-bold">Cancelar</button>
+                         <button onClick={handleSaveSession} className="px-8 py-2 bg-primary hover:bg-blue-600 text-white rounded-lg font-bold flex items-center gap-2">
+                             <Save size={18} /> Guardar Cambios
+                         </button>
+                    </div>
+                </div>
+            </div>
         )}
     </div>
   );

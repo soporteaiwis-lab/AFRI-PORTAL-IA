@@ -3,11 +3,10 @@ import { COURSE_CONTENT } from '../constants';
 import { ClassSession, User } from '../types';
 import { Play, CheckCircle, Lock, FileText, BrainCircuit, Circle, Calendar, Loader2 } from 'lucide-react';
 import VideoModal from '../components/VideoModal';
-import { VideoMap } from '../services/dataService';
 
 interface ClassesProps {
   user: User;
-  videos: VideoMap;
+  videos: Record<string, string>;
   onUpdateProgress: (count: number, progressJson: Record<string, boolean>) => Promise<void>;
 }
 

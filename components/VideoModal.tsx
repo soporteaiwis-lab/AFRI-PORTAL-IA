@@ -14,8 +14,6 @@ interface VideoModalProps {
 const VideoModal: React.FC<VideoModalProps> = ({ session, onClose, onMarkComplete, weekId }) => {
   const [activeTab, setActiveTab] = useState<'description' | 'transcript' | 'summary' | 'quiz'>('description');
   const [transcriptHtml, setTranscriptHtml] = useState<string>('');
-  const [rawTranscript, setRawTranscript] = useState<string>('');
-  const [loadingTranscript, setLoadingTranscript] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   
   // AI State
@@ -29,79 +27,42 @@ const VideoModal: React.FC<VideoModalProps> = ({ session, onClose, onMarkComplet
 
   useEffect(() => {
     if (session) {
-        // Reset state on open
         setActiveTab('description');
         setQuizQuestions([]);
         setQuizStarted(false);
         setShowResults(false);
         setUserAnswers([]);
         setSummary('');
-        setRawTranscript('');
         setTranscriptHtml('');
         setIsSyncing(false);
+        
+        // Process transcript if available from DB
+        if (session.transcript) {
+            const html = session.transcript
+              .replace(/^### (.*$)/gim, '<h3 class="text-lg font-bold text-primary mt-6 mb-2">$1</h3>')
+              .replace(/^## (.*$)/gim, '<h2 class="text-xl font-bold text-white mt-8 mb-4 border-b border-slate-700 pb-2">$1</h2>')
+              .replace(/^# (.*$)/gim, '<h1 class="text-2xl font-bold text-white mt-2 mb-6">$1</h1>')
+              .replace(/\*\*(.*)\*\*/gim, '<strong class="text-white">$1</strong>')
+              .replace(/\n\n/g, '</p><p class="mb-4 text-slate-300 leading-relaxed">')
+              .replace(/\n/g, '<br />');
+            setTranscriptHtml(`<div class="transcript-content"><p class="mb-4 text-slate-300 leading-relaxed">${html}</p></div>`);
+        } else {
+            setTranscriptHtml('NO_TRANSCRIPT');
+        }
     }
   }, [session]);
 
   const handleMarkClick = async () => {
       if (!session) return;
       setIsSyncing(true);
-      await onMarkComplete(session.id);
-      // Fake a small delay to show the user "Data is saved" assurance
-      setTimeout(() => setIsSyncing(false), 1000);
-  };
-
-  // Load Transcript automatically if needed for AI tabs
-  useEffect(() => {
-    if (session && (activeTab === 'transcript' || activeTab === 'quiz' || activeTab === 'summary')) {
-      if (!rawTranscript && !loadingTranscript) {
-          loadTranscript();
-      }
-    }
-  }, [session, activeTab]);
-
-  const loadTranscript = async () => {
-    if (!session || !weekId) return;
-    
-    setLoadingTranscript(true);
-    // Construct URL for transcripts - Assuming standard naming convention
-    const dayLabel = session.day || `Clase ${session.sessionNumber}`;
-    const dayName = dayLabel.replace('Clase ', 'clase').trim();
-    // Use fallback logic or standard naming. Assuming "fase1-semanaX-claseY.md" or similar based on GitHub
-    const url = `https://raw.githubusercontent.com/soporteaiwis-lab/simpledata/main/transcripts/fase1-semana${weekId}-${dayName}.md`;
-
-    try {
-      const response = await fetch(url);
-      if (response.ok) {
-        const text = await response.text();
-        setRawTranscript(text); 
-        
-        // Simple Markdown to HTML parser for display
-        const html = text
-          .replace(/^### (.*$)/gim, '<h3 class="text-lg font-bold text-primary mt-6 mb-2">$1</h3>')
-          .replace(/^## (.*$)/gim, '<h2 class="text-xl font-bold text-white mt-8 mb-4 border-b border-slate-700 pb-2">$1</h2>')
-          .replace(/^# (.*$)/gim, '<h1 class="text-2xl font-bold text-white mt-2 mb-6">$1</h1>')
-          .replace(/\*\*(.*)\*\*/gim, '<strong class="text-white">$1</strong>')
-          .replace(/\n\n/g, '</p><p class="mb-4 text-slate-300 leading-relaxed">')
-          .replace(/\n/g, '<br />');
-        
-        setTranscriptHtml(`<div class="transcript-content"><p class="mb-4 text-slate-300 leading-relaxed">${html}</p></div>`);
-      } else {
-        setTranscriptHtml('ERROR_NOT_FOUND');
-      }
-    } catch (error) {
-      setTranscriptHtml('ERROR_FETCH');
-    } finally {
-      setLoadingTranscript(false);
-    }
+      await onMarkComplete(session.id); // In Firestore implementation, id might differ, handled by caller
+      setTimeout(() => setIsSyncing(false), 500);
   };
 
   const handleGenerateSummary = async () => {
-      if (!rawTranscript) {
-          await loadTranscript();
-          if (!rawTranscript) return; 
-      }
+      if (!session?.transcript) return;
       setLoadingSummary(true);
-      const result = await generateSummaryFromText(rawTranscript);
+      const result = await generateSummaryFromText(session.transcript);
       setSummary(result);
       setLoadingSummary(false);
   };
@@ -109,23 +70,17 @@ const VideoModal: React.FC<VideoModalProps> = ({ session, onClose, onMarkComplet
   const startQuiz = async () => {
       setQuizLoading(true);
       try {
-          let textToAnalyze = rawTranscript;
-          if (!textToAnalyze) {
-             await loadTranscript();
-             textToAnalyze = rawTranscript; 
-          }
-
-          if (textToAnalyze) {
-              const questions = await generateQuizFromText(textToAnalyze);
+          if (session?.transcript) {
+              const questions = await generateQuizFromText(session.transcript);
               if (questions.length > 0) {
                 setQuizQuestions(questions);
                 setQuizStarted(true);
                 setUserAnswers(new Array(questions.length).fill(-1));
               } else {
-                alert("No se pudo generar el quiz. Intenta de nuevo.");
+                alert("No se pudo generar el quiz.");
               }
           } else {
-              alert("No hay transcripción disponible para generar el quiz.");
+              alert("No hay transcripción disponible para esta clase.");
           }
       } catch (e) {
           console.error(e);
@@ -237,15 +192,9 @@ const VideoModal: React.FC<VideoModalProps> = ({ session, onClose, onMarkComplet
                             )}
                             
                             {isSyncing 
-                                ? 'Sincronizando...' 
+                                ? 'Guardando...' 
                                 : session.isCompleted ? 'Clase Completada' : 'Marcar como Vista'}
                         </button>
-                        
-                        {isSyncing && (
-                            <span className="text-xs text-slate-500 flex items-center gap-1 animate-pulse">
-                                <Cloud size={12} /> Guardando en Base de Datos Google...
-                            </span>
-                        )}
                     </div>
                 </div>
             )}
@@ -263,10 +212,10 @@ const VideoModal: React.FC<VideoModalProps> = ({ session, onClose, onMarkComplet
                             </p>
                             <button 
                                 onClick={handleGenerateSummary}
-                                disabled={loadingTranscript && !rawTranscript}
-                                className="px-6 py-3 bg-white text-dark font-bold rounded-xl hover:bg-slate-200 transition-colors flex items-center gap-2"
+                                disabled={!session.transcript}
+                                className="px-6 py-3 bg-white text-dark font-bold rounded-xl hover:bg-slate-200 transition-colors flex items-center gap-2 disabled:opacity-50"
                             >
-                                <Sparkles size={18} /> Generar Resumen
+                                <Sparkles size={18} /> {session.transcript ? 'Generar Resumen' : 'Sin transcripción disponible'}
                             </button>
                         </div>
                     ) : loadingSummary ? (
@@ -286,18 +235,13 @@ const VideoModal: React.FC<VideoModalProps> = ({ session, onClose, onMarkComplet
 
             {activeTab === 'transcript' && (
                 <div className="animate-in slide-in-from-right-4 duration-300">
-                    {loadingTranscript ? (
-                        <div className="flex flex-col items-center justify-center py-12 text-slate-500">
-                            <div className="w-8 h-8 border-4 border-slate-600 border-t-primary rounded-full animate-spin mb-4"></div>
-                            <p>Descargando transcripción...</p>
-                        </div>
-                    ) : transcriptHtml === 'ERROR_NOT_FOUND' ? (
+                    {transcriptHtml === 'NO_TRANSCRIPT' ? (
                         <div className="flex flex-col items-center justify-center py-12 text-center">
                             <div className="bg-slate-800 p-4 rounded-full mb-4">
                                 <FileText size={32} className="text-slate-500" />
                             </div>
-                            <p className="text-slate-400 text-lg font-medium">Transcripción no disponible</p>
-                            <p className="text-slate-500 text-sm mt-1">El archivo fuente no se encuentra en el repositorio.</p>
+                            <p className="text-slate-400 text-lg font-medium">Transcripción no disponible en la base de datos.</p>
+                            <p className="text-slate-500 text-sm mt-1">El administrador debe cargar el contenido en el Panel Master.</p>
                         </div>
                     ) : (
                         <div 
@@ -321,7 +265,7 @@ const VideoModal: React.FC<VideoModalProps> = ({ session, onClose, onMarkComplet
                             </p>
                             <button 
                                 onClick={startQuiz}
-                                disabled={quizLoading || (loadingTranscript && !rawTranscript)}
+                                disabled={quizLoading || !session.transcript}
                                 className="px-8 py-3 bg-white text-dark font-bold rounded-xl hover:bg-slate-200 transition-colors flex items-center gap-2 disabled:opacity-50"
                             >
                                 {quizLoading ? <div className="w-5 h-5 border-2 border-dark border-t-transparent rounded-full animate-spin"></div> : <BrainCircuit size={20} />}

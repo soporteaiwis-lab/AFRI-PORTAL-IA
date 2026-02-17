@@ -1,208 +1,167 @@
-import { User } from '../types';
 
-const SPREADSHEET_ID = '13rQdIhzb-Ve9GAClQwopVtS9u2CpGTj2aUy528a7YSw';
-const API_KEY = 'AIzaSyCzPHhigfOD6oHw26JftVg3YyKLijwbyY4';
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwxHzlEhCYVZaPSJl4V6ptxcDkefM_SUJbwqpgVB9gZV3SGVbWYB3EGMf6tHP0PfET62w/exec';
+import { db } from '../firebaseConfig';
+import { User, ClassSession, WeekData } from '../types';
+import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc, query, orderBy, getDoc } from 'firebase/firestore';
+import { COURSE_CONTENT } from '../constants'; // Usado para semilla inicial
 
-export interface VideoMap {
-  [key: string]: string; 
-}
-
-// LOCAL STORAGE KEYS
-const LS_PROGRESS_KEY = 'afri_local_progress_backup';
+// Colecciones
+const USERS_COL = 'users';
+const CONTENT_COL = 'content'; // Guardaremos las sesiones aquí
 
 /**
- * Obtiene todos los datos. 
- * ESTRATEGIA: Combina datos de Google Sheets con la copia de seguridad local
- * para evitar que el retraso de la API borre el progreso del usuario.
+ * Inicializa la base de datos con datos por defecto si está vacía.
+ * Esto asegura que al conectar Firebase por primera vez, no esté todo en blanco.
  */
-export const fetchAllData = async () => {
-  const timestamp = new Date().getTime();
-  try {
-    // IMPORTANTE: Se lee de las hojas terminadas en "3" como solicitó el usuario para AFRI
-    const [usersRes, skillsRes, progressRes, videosRes] = await Promise.all([
-      fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/Usuarios3?key=${API_KEY}&t=${timestamp}`),
-      fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/Habilidades3?key=${API_KEY}&t=${timestamp}`),
-      fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/Progreso3?key=${API_KEY}&t=${timestamp}`),
-      fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/Videos3?key=${API_KEY}&t=${timestamp}`)
-    ]);
+export const seedDatabaseIfEmpty = async () => {
+    if (!db) return;
 
-    const usersData = await usersRes.json();
-    const skillsData = await skillsRes.json();
-    const progressData = await progressRes.json();
-    const videosData = await videosRes.json();
-
-    return processData(usersData, skillsData, progressData, videosData);
-  } catch (error) {
-    console.error("Error crítico leyendo base de datos:", error);
-    // En caso de error total, intentar recuperar del local storage
-    return { users: [], videos: {}, progressJsonMap: {} };
-  }
-};
-
-const processData = (usersData: any, skillsData: any, progressData: any, videosData: any) => {
-  const users: User[] = [];
-  const videos: VideoMap = {};
-  const skillsMap: Record<string, any> = {};
-  const progressMap: Record<string, any> = {};
-  const progressJsonMap: Record<string, any> = {}; 
-
-  // 1. Load Local Backup to override stale cloud data
-  let localBackup: Record<string, any> = {};
-  try {
-    const stored = localStorage.getItem(LS_PROGRESS_KEY);
-    if (stored) localBackup = JSON.parse(stored);
-  } catch (e) {}
-
-  if (skillsData.values) {
-    skillsData.values.slice(1).forEach((row: any[]) => {
-      if (row[0]) {
-        skillsMap[row[0]] = {
-          prompting: parseInt(row[3]) || 0,
-          tools: parseInt(row[4]) || 0,
-          analysis: parseInt(row[5]) || 0
+    const usersSnap = await getDocs(collection(db, USERS_COL));
+    if (usersSnap.empty) {
+        console.log("Sembrando base de datos inicial...");
+        
+        // 1. Crear Usuario Admin
+        const adminUser: User = {
+            id: 'admin-root',
+            email: 'armin@aiwis.cl',
+            name: 'Armin W Salazar',
+            role: 'Master Root',
+            avatar: 'A',
+            password: '1234',
+            stats: { prompting: 100, tools: 100, analysis: 100 },
+            progress: { completed: 0, total: 12 },
+            progress_details: {}
         };
-      }
-    });
-  }
+        await setDoc(doc(db, USERS_COL, adminUser.email), adminUser);
 
-  if (progressData.values) {
-    progressData.values.slice(1).forEach((row: any[]) => {
-      if (row[0]) { // Email
-        const email = row[0];
-        
-        // Intentar parsear JSON de la nube
-        let cloudDetails: Record<string, boolean> = {};
-        if (row[7]) {
-           try {
-             const rawJson = row[7].toString().trim();
-             if (rawJson.startsWith('{')) {
-                cloudDetails = JSON.parse(rawJson);
-             }
-           } catch (e) { console.warn("Error JSON Cloud", e); }
-        }
-
-        // LOGICA DE MERGE INTELIGENTE (Crucial para no perder datos):
-        // Obtenemos el backup local para este usuario.
-        const localDetails = localBackup[email] || {};
-        
-        // Creamos un nuevo objeto base con lo de la nube.
-        const mergedDetails: Record<string, boolean> = { ...cloudDetails };
-
-        // Sobre-escribimos con lo local SOLO si en local es TRUE.
-        // Esto evita que si la nube dice "Visto" y el local (antiguo) dice "No Visto", se borre.
-        // Pero si Local dice "Visto" (recién hecho) y Nube dice "No Visto" (lag), gana Local.
-        Object.keys(localDetails).forEach(key => {
-            if (localDetails[key] === true) {
-                mergedDetails[key] = true;
+        // 2. Crear Contenido (Flattened sessions)
+        for (const week of COURSE_CONTENT) {
+            for (const session of week.sessions) {
+                const sessionData: ClassSession = {
+                    ...session,
+                    weekId: week.id,
+                    // Aseguramos campos opcionales
+                    videoUrl: session.videoUrl || '',
+                    transcript: session.transcript || '',
+                    description: session.description || ''
+                };
+                // ID compuesto para fácil acceso: w1-s1
+                const docId = `w${week.id}-s${session.sessionNumber}`;
+                await setDoc(doc(db, CONTENT_COL, docId), sessionData);
             }
-        });
-        
-        // Calcular completadas reales basadas en el merge
-        const completedCount = Object.values(mergedDetails).filter(v => v === true).length;
-
-        progressMap[email] = {
-          completed: completedCount,
-          total: 12
-        };
-        progressJsonMap[email] = mergedDetails;
-      }
-    });
-  }
-
-  if (usersData.values) {
-    usersData.values.slice(1).forEach((row: any[], index: number) => {
-      if (row[0] && row[1]) {
-        const email = row[0];
-        users.push({
-          id: `u-${index}`,
-          email: email,
-          name: row[1],
-          role: row[2] || 'Estudiante',
-          avatar: row[1].charAt(0).toUpperCase(),
-          // Assume column 4 (index 3) is password, default to '1234'
-          password: row[3] ? row[3].toString() : '1234', 
-          stats: skillsMap[email] || { prompting: 0, tools: 0, analysis: 0 },
-          progress: progressMap[email] || { completed: 0, total: 12 },
-          progress_details: progressJsonMap[email] || {}
-        });
-      }
-    });
-  }
-
-  if (videosData.values) {
-    videosData.values.slice(1).forEach((row: any[]) => {
-      if (row[1] && row[2]) {
-        const key = `${row[1]}-${row[2].toString().toLowerCase().replace('clase', '').trim()}`;
-        videos[key] = row[3] || '';
-      }
-    });
-  }
-
-  return { users, videos, progressJsonMap };
+        }
+        console.log("Base de datos sembrada.");
+    }
 };
 
 /**
- * Guarda el progreso en la nube Y en local storage.
+ * Obtiene usuarios desde Firestore
+ */
+export const getUsers = async (): Promise<User[]> => {
+    if (!db) return []; // Fallback empty
+    try {
+        const snapshot = await getDocs(collection(db, USERS_COL));
+        return snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as User));
+    } catch (e) {
+        console.error("Error obteniendo usuarios:", e);
+        return [];
+    }
+};
+
+/**
+ * Obtiene el contenido (Clases) desde Firestore y lo estructura en Semanas
+ */
+export const getContent = async (): Promise<WeekData[]> => {
+    if (!db) return COURSE_CONTENT; // Fallback to constants if no DB
+    try {
+        const snapshot = await getDocs(query(collection(db, CONTENT_COL), orderBy('weekId'), orderBy('sessionNumber')));
+        
+        if (snapshot.empty) return COURSE_CONTENT;
+
+        const sessions = snapshot.docs.map(doc => doc.data() as ClassSession);
+        
+        // Reconstruir estructura de semanas
+        const weeksMap = new Map<number, WeekData>();
+        
+        sessions.forEach(session => {
+            if (!weeksMap.has(session.weekId)) {
+                weeksMap.set(session.weekId, {
+                    id: session.weekId,
+                    title: getWeekTitle(session.weekId), // Helper simple
+                    sessions: []
+                });
+            }
+            weeksMap.get(session.weekId)?.sessions.push(session);
+        });
+
+        return Array.from(weeksMap.values()).sort((a, b) => a.id - b.id);
+    } catch (e) {
+        console.error("Error obteniendo contenido:", e);
+        return COURSE_CONTENT;
+    }
+};
+
+// Helper para títulos de semanas (Hardcoded o podría guardarse en DB también)
+const getWeekTitle = (id: number) => {
+    const titles = [
+        "Fundamentos de IA y Productividad",
+        "Herramientas y Desarrollo Asistido",
+        "Infraestructura Cloud e IA",
+        "Automatización Avanzada",
+        "Estrategia y Negocio",
+        "Proyecto Final"
+    ];
+    return titles[id - 1] || `Semana ${id}`;
+};
+
+/**
+ * CRUD USUARIOS
+ */
+export const updateUser = async (user: User) => {
+    if (!db) return;
+    try {
+        // Usamos el email como ID del documento para unicidad fácil
+        await setDoc(doc(db, USERS_COL, user.email), user, { merge: true });
+    } catch (e) {
+        console.error("Error actualizando usuario:", e);
+        throw e;
+    }
+};
+
+export const deleteUser = async (email: string) => {
+    if (!db) return;
+    await deleteDoc(doc(db, USERS_COL, email));
+};
+
+export const createUser = async (user: User) => {
+    if (!db) return;
+    // Verificar si existe
+    const docRef = doc(db, USERS_COL, user.email);
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+        throw new Error("El usuario ya existe");
+    }
+    await setDoc(docRef, user);
+};
+
+/**
+ * CRUD CONTENIDO
+ */
+export const updateSession = async (session: ClassSession) => {
+    if (!db) return;
+    const docId = `w${session.weekId}-s${session.sessionNumber}`;
+    await setDoc(doc(db, CONTENT_COL, docId), session, { merge: true });
+};
+
+/**
+ * Guardar Progreso (Simplificado)
  */
 export const saveUserProgress = async (user: User, progressJson: Record<string, boolean>) => {
-  const completadas = Object.values(progressJson).filter(v => v === true).length;
-  const jsonString = JSON.stringify(progressJson);
-
-  // 1. SAVE LOCAL BACKUP IMMEDIATELY (Copia de seguridad en el dispositivo)
-  try {
-      const stored = localStorage.getItem(LS_PROGRESS_KEY);
-      const backup = stored ? JSON.parse(stored) : {};
-      backup[user.email] = progressJson;
-      localStorage.setItem(LS_PROGRESS_KEY, JSON.stringify(backup));
-  } catch (e) { console.error("Local Backup Failed", e); }
-
-  // 2. SEND TO CLOUD (Google Apps Script)
-  const payload = {
-    action: 'updateProgress',
-    email: user.email,
-    nombre: user.name,
-    rol: user.role,
-    completadas: completadas,
-    progresoJSON: jsonString
-  };
-
-  try {
-    await fetch(APPS_SCRIPT_URL, {
-        method: 'POST',
-        mode: 'no-cors', // Importante para enviar datos a Apps Script sin bloqueo CORS
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify(payload)
+    if (!db) return;
+    const count = Object.values(progressJson).filter(v => v).length;
+    
+    const userRef = doc(db, USERS_COL, user.email);
+    await updateDoc(userRef, {
+        progress: { completed: count, total: 12 },
+        progress_details: progressJson
     });
-    return true;
-  } catch (error) {
-    console.error("Error guardando en la nube:", error);
-    return false;
-  }
-};
-
-/**
- * Función ADMINISTRATIVA para que Armin edite datos directamente en Sheets.
- */
-export const adminUpdateCell = async (sheetName: string, key: string, column: number, value: any) => {
-    const payload = {
-        action: 'adminUpdate',
-        sheetName,
-        key,
-        column, // 1-based index
-        value
-    };
-
-    try {
-        await fetch(APPS_SCRIPT_URL, {
-            method: 'POST',
-            mode: 'no-cors',
-            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-            body: JSON.stringify(payload)
-        });
-        return true;
-    } catch (e) {
-        console.error("Admin update failed", e);
-        return false;
-    }
 };

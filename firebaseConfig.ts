@@ -1,13 +1,16 @@
-// Firebase configuration is currently disabled.
-// The application is using Google Sheets (via Apps Script) as the primary database.
-// To re-enable Firebase, uncomment the code below and provide valid keys.
 
-/*
 import { initializeApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 
+// --- CONFIGURACIÓN DE FIREBASE ---
+// 1. Ve a https://console.firebase.google.com/
+// 2. Crea un proyecto nuevo.
+// 3. Ve a "Configuración del proyecto" -> "General" -> Agrega una app Web (</>).
+// 4. Copia las credenciales aquí abajo:
+
 const firebaseConfig = {
-  apiKey: "TU_API_KEY", 
+  // REEMPLAZA ESTO CON TUS DATOS REALES DE FIREBASE
+  apiKey: "TU_API_KEY_AQUI",
   authDomain: "tu-proyecto.firebaseapp.com",
   projectId: "tu-proyecto-id",
   storageBucket: "tu-proyecto.appspot.com",
@@ -15,7 +18,18 @@ const firebaseConfig = {
   appId: "1:123456789:web:abcdef"
 };
 
-const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app);
-*/
-export const db = null;
+// Inicializar Firebase solo si hay configuración válida, sino no romperá la app (pero no guardará datos)
+let dbExport = null;
+try {
+    if (firebaseConfig.apiKey !== "TU_API_KEY_AQUI") {
+        const app = initializeApp(firebaseConfig);
+        dbExport = getFirestore(app);
+        console.log("Firebase conectado exitosamente.");
+    } else {
+        console.warn("⚠️ FALTA CONFIGURAR FIREBASE EN firebaseConfig.ts");
+    }
+} catch (e) {
+    console.error("Error inicializando Firebase:", e);
+}
+
+export const db = dbExport;

@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+
+import React, { useState, useEffect, useCallback } from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/Layout';
 import Login from './pages/Login';
@@ -7,44 +8,39 @@ import Classes from './pages/Classes';
 import Students from './pages/Students';
 import Guide from './pages/Guide';
 import AdminPanel from './pages/AdminPanel';
-import { User } from './types';
-import { fetchAllData, VideoMap, saveUserProgress } from './services/dataService';
+import { User, WeekData } from './types';
+import { getUsers, getContent, saveUserProgress, seedDatabaseIfEmpty } from './services/dataService';
+import { db } from './firebaseConfig';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [users, setUsers] = useState<User[]>([]);
-  const [videos, setVideos] = useState<VideoMap>({});
+  const [content, setContent] = useState<WeekData[]>([]);
   const [loading, setLoading] = useState(true);
   
-  const loadDataFromCloud = useCallback(async (isInitial = false) => {
+  const loadData = useCallback(async (isInitial = false) => {
     if (isInitial) setLoading(true);
     
-    // This now returns merged data (Cloud + Local Backup)
-    const { users: fetchedUsers, videos: fetchedVideos } = await fetchAllData();
-    
-    setVideos(fetchedVideos);
-    
-    // Always update the full users list for the Students/Admin page
-    setUsers(fetchedUsers);
+    // Attempt to seed if empty (First run)
+    if (isInitial && db) await seedDatabaseIfEmpty();
 
-    // If a user is logged in, refresh their own data while preserving optimistic UI
+    const [fetchedUsers, fetchedContent] = await Promise.all([
+        getUsers(),
+        getContent()
+    ]);
+    
+    setUsers(fetchedUsers);
+    setContent(fetchedContent);
+
+    // Refresh current user data if logged in
     const storedEmail = localStorage.getItem('simpledata_user_email');
     if (storedEmail) {
         const currentUserData = fetchedUsers.find(u => u.email === storedEmail);
-        
         if (currentUserData) {
-             // If we have a local user state (optimistic), we only update if the cloud data 
-             // actually has MORE completions, or if it's the initial load.
-             // This prevents "flashing" old data.
-             if (!user || isInitial) {
-                 setUser(currentUserData);
-             } else {
-                 // Subtle merge: Only take stats/roles, but trust local progress if newer
-                 // (Ideally already handled by processData in dataService, but extra safety here)
-                 if (currentUserData.progress.completed > user.progress.completed) {
-                     setUser(currentUserData);
-                 }
-             }
+             setUser(currentUserData);
+        } else if (user) {
+             // If user was deleted from DB but has session, logout
+             handleLogout();
         }
     }
     
@@ -52,11 +48,10 @@ const App: React.FC = () => {
   }, [user]);
 
   useEffect(() => {
-    loadDataFromCloud(true);
-    // Poll every 20 seconds to get updates from other students
-    const interval = setInterval(() => loadDataFromCloud(false), 20000);
-    return () => clearInterval(interval);
-  }, [loadDataFromCloud]);
+    loadData(true);
+    // Polling is less critical with Firebase real-time but good for simple refresh
+    // We can reduce frequency or rely on manual refresh in components
+  }, [loadData]);
 
   const handleLogin = (newUser: User) => {
     setUser(newUser);
@@ -70,18 +65,13 @@ const App: React.FC = () => {
 
   const handleUpdateProgress = async (count: number, progressJson: Record<string, boolean>) => {
     if (!user) return;
-
-    // 1. Optimistic Update (Immediate UI feedback)
     const updatedUser = { 
         ...user, 
         progress: { ...user.progress, completed: count },
         progress_details: progressJson
     };
-    
     setUser(updatedUser);
     setUsers(prev => prev.map(u => u.email === user.email ? updatedUser : u));
-
-    // 2. Persist (Local + Cloud) handled by service
     await saveUserProgress(updatedUser, progressJson);
   };
 
@@ -94,15 +84,25 @@ const App: React.FC = () => {
             <div className="absolute inset-0 flex items-center justify-center text-xs animate-pulse">AFRI</div>
         </div>
         <div className="text-center space-y-2">
-            <p className="tracking-[0.3em] uppercase text-sm font-bold terminal-text">Conectando al Mainframe...</p>
-            <p className="text-[10px] text-slate-500">SINCRONIZANDO BASE DE DATOS SEGURA</p>
+            <p className="tracking-[0.3em] uppercase text-sm font-bold terminal-text">Iniciando Sistemas...</p>
+            <p className="text-[10px] text-slate-500">CONECTANDO A FIREBASE CLOUD</p>
+            {!db && <p className="text-red-500 font-bold bg-red-900/20 p-2 rounded">⚠️ FALTA API KEY EN firebaseConfig.ts</p>}
         </div>
       </div>
     );
   }
 
-  // Check master role for protected route
   const isMaster = user?.role.toLowerCase().includes('master') || user?.email.includes('armin');
+
+  // Flatten videos map for compatibility with existing components if needed, 
+  // but better to pass the Content object structure down.
+  // Converting Content to simple VideoMap for compatibility with legacy components:
+  const videoMap: Record<string, string> = {};
+  content.forEach(week => {
+      week.sessions.forEach(session => {
+          videoMap[`${week.id}-${session.sessionNumber}`] = session.videoUrl || '';
+      });
+  });
 
   return (
     <HashRouter>
@@ -110,12 +110,15 @@ const App: React.FC = () => {
         <Routes>
           <Route path="/login" element={!user ? <Login onLogin={handleLogin} users={users} /> : <Navigate to="/" />} />
           <Route path="/" element={user ? <Dashboard user={user} /> : <Navigate to="/login" />} />
-          <Route path="/classes" element={user ? <Classes user={user} videos={videos} onUpdateProgress={handleUpdateProgress} /> : <Navigate to="/login" />} />
+          <Route path="/classes" element={user ? <Classes user={user} videos={videoMap} onUpdateProgress={handleUpdateProgress} /> : <Navigate to="/login" />} />
           <Route path="/students" element={user ? <Students users={users} /> : <Navigate to="/login" />} />
           <Route path="/guide" element={user ? <Guide /> : <Navigate to="/login" />} />
           
-          {/* Admin Route */}
-          <Route path="/admin" element={user && isMaster ? <AdminPanel users={users} videos={videos} /> : <Navigate to="/" />} />
+          <Route path="/admin" element={
+              user && isMaster 
+              ? <AdminPanel users={users} content={content} onRefresh={() => loadData(false)} /> 
+              : <Navigate to="/" />
+          } />
           
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>

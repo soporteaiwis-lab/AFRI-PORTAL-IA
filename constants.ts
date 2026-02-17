@@ -7,6 +7,7 @@ export const COURSE_CONTENT: WeekData[] = [
     sessions: [
       { 
         id: '1-1', 
+        weekId: 1,
         sessionNumber: 1, 
         title: 'Introducción a la IA Corporativa y ChatGPT', 
         description: 'Visión general de la IA en AFRI y dominio de herramientas LLM (ChatGPT/Claude) para productividad inmediata.', 
@@ -16,6 +17,7 @@ export const COURSE_CONTENT: WeekData[] = [
       },
       { 
         id: '1-2', 
+        weekId: 1,
         sessionNumber: 2, 
         title: 'Ingeniería de Prompts Profesional', 
         description: 'Técnicas avanzadas de comunicación con IAs para obtener resultados precisos y útiles en el trabajo diario.', 
@@ -31,6 +33,7 @@ export const COURSE_CONTENT: WeekData[] = [
     sessions: [
       { 
         id: '2-1', 
+        weekId: 2,
         sessionNumber: 1, 
         title: 'IA para Desarrolladores (Copilot & Cursor)', 
         description: 'Uso de asistentes de código para acelerar el desarrollo y reducir errores en la programación.', 
@@ -40,6 +43,7 @@ export const COURSE_CONTENT: WeekData[] = [
       },
       { 
         id: '2-2', 
+        weekId: 2,
         sessionNumber: 2, 
         title: 'Automatización Básica de Tareas', 
         description: 'Creación de scripts simples y flujos de trabajo para eliminar tareas repetitivas administrativas.', 
@@ -55,6 +59,7 @@ export const COURSE_CONTENT: WeekData[] = [
     sessions: [
       { 
         id: '3-1', 
+        weekId: 3,
         sessionNumber: 1, 
         title: 'IA en Azure Databricks y Cloud', 
         description: 'Exploración de capacidades de IA en la nube de Azure y cómo aprovecharlas en proyectos de datos.', 
@@ -64,6 +69,7 @@ export const COURSE_CONTENT: WeekData[] = [
       },
       { 
         id: '3-2', 
+        weekId: 3,
         sessionNumber: 2, 
         title: 'Soluciones Enterprise (Oracle/AWS)', 
         description: 'Panorama de soluciones de IA en ecosistemas Oracle y AWS para grandes volúmenes de datos.', 
@@ -79,6 +85,7 @@ export const COURSE_CONTENT: WeekData[] = [
     sessions: [
       { 
         id: '4-1', 
+        weekId: 4,
         sessionNumber: 1, 
         title: 'Workflows con N8N', 
         description: 'Orquestación de procesos complejos conectando múltiples aplicaciones sin necesidad de código extenso.', 
@@ -88,6 +95,7 @@ export const COURSE_CONTENT: WeekData[] = [
       },
       { 
         id: '4-2', 
+        weekId: 4,
         sessionNumber: 2, 
         title: 'Agentes IA y LangChain', 
         description: 'Introducción a la creación de agentes autónomos capaces de razonar y ejecutar acciones.', 
@@ -103,6 +111,7 @@ export const COURSE_CONTENT: WeekData[] = [
     sessions: [
       { 
         id: '5-1', 
+        weekId: 5,
         sessionNumber: 1, 
         title: 'IA en Sector Financiero y Ventas', 
         description: 'Casos de uso reales aplicados a finanzas y estrategias para comercializar soluciones de IA.', 
@@ -112,6 +121,7 @@ export const COURSE_CONTENT: WeekData[] = [
       },
       { 
         id: '5-2', 
+        weekId: 5,
         sessionNumber: 2, 
         title: 'Detección de Oportunidades', 
         description: 'Metodologías para identificar dónde la IA aporta mayor valor dentro de la organización o clientes.', 
@@ -127,6 +137,7 @@ export const COURSE_CONTENT: WeekData[] = [
     sessions: [
       { 
         id: '6-1', 
+        weekId: 6,
         sessionNumber: 1, 
         title: 'Diseño de Propuestas (Design Thinking)', 
         description: 'Estructuración y diseño de la solución final aplicando metodologías ágiles.', 
@@ -136,6 +147,7 @@ export const COURSE_CONTENT: WeekData[] = [
       },
       { 
         id: '6-2', 
+        weekId: 6,
         sessionNumber: 2, 
         title: 'Presentación Final y Feedback', 
         description: 'Defensa del proyecto ante el comité, feedback y próximos pasos para la implementación.', 
