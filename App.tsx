@@ -8,6 +8,7 @@ import Classes from './pages/Classes';
 import Students from './pages/Students';
 import Guide from './pages/Guide';
 import AdminPanel from './pages/AdminPanel';
+import CloudConnectionWizard from './components/CloudConnectionWizard'; // Nuevo componente
 import { User, WeekData } from './types';
 import { getUsers, getContent, saveUserProgress, seedDatabaseIfEmpty } from './services/dataService';
 import { isConfigured } from './firebaseConfig';
@@ -17,6 +18,13 @@ const App: React.FC = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [content, setContent] = useState<WeekData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [initError, setInitError] = useState('');
+
+  // 1. CHEQUEO DE CONFIGURACIÓN DE NUBE
+  // Si no está configurado, mostramos el Wizard inmediatamente.
+  if (!isConfigured) {
+      return <CloudConnectionWizard />;
+  }
 
   const handleLogin = (newUser: User) => {
     setUser(newUser);
@@ -30,32 +38,36 @@ const App: React.FC = () => {
   
   const loadData = useCallback(async (isInitial = false) => {
     if (isInitial) setLoading(true);
+    setInitError('');
     
-    // Intentar inicializar la nube
-    if (isConfigured) {
+    try {
+        // Intento de conexión real
         await seedDatabaseIfEmpty();
-    }
 
-    const [fetchedUsers, fetchedContent] = await Promise.all([
-        getUsers(),
-        getContent()
-    ]);
-    
-    setUsers(fetchedUsers);
-    setContent(fetchedContent);
+        const [fetchedUsers, fetchedContent] = await Promise.all([
+            getUsers(),
+            getContent()
+        ]);
+        
+        setUsers(fetchedUsers);
+        setContent(fetchedContent);
 
-    // Restaurar sesión
-    const storedEmail = localStorage.getItem('simpledata_user_email');
-    if (storedEmail) {
-        const currentUserData = fetchedUsers.find(u => u.email === storedEmail);
-        if (currentUserData) {
-             setUser(currentUserData);
-        } else {
-             handleLogout();
+        // Restaurar sesión
+        const storedEmail = localStorage.getItem('simpledata_user_email');
+        if (storedEmail) {
+            const currentUserData = fetchedUsers.find(u => u.email === storedEmail);
+            if (currentUserData) {
+                 setUser(currentUserData);
+            } else {
+                 handleLogout();
+            }
         }
+    } catch (e: any) {
+        console.error("Error cargando datos:", e);
+        setInitError("Error conectando a Google Cloud. Verifique su conexión.");
+    } finally {
+        if (isInitial) setLoading(false);
     }
-    
-    if (isInitial) setLoading(false);
   }, [handleLogout]);
 
   useEffect(() => {
@@ -83,18 +95,24 @@ const App: React.FC = () => {
             <div className="absolute inset-0 flex items-center justify-center text-xs animate-pulse">AFRI</div>
         </div>
         <div className="text-center space-y-2">
-            <p className="tracking-[0.3em] uppercase text-sm font-bold terminal-text">Cargando Sistema...</p>
-            <p className="text-[10px] text-slate-500 flex items-center justify-center gap-2">
-                {isConfigured ? '🟢 CONECTANDO A GOOGLE CLOUD DATABASE' : '🔴 MODO OFFLINE (SIN SYNC)'}
-            </p>
-            {!isConfigured && (
-                <p className="text-[10px] text-red-500 animate-pulse">
-                   ⚠️ Requiere configurar firebaseConfig.ts para sync global
-                </p>
-            )}
+            <p className="tracking-[0.3em] uppercase text-sm font-bold terminal-text">Conectando a Nube...</p>
+            <p className="text-[10px] text-slate-500">Google Cloud Firestore</p>
         </div>
       </div>
     );
+  }
+
+  // Si falló la carga inicial (ej. internet caído)
+  if (initError) {
+      return (
+          <div className="min-h-screen bg-black flex items-center justify-center text-red-500 font-mono p-4 text-center">
+              <div>
+                  <h2 className="text-xl font-bold mb-2">Error de Conexión</h2>
+                  <p className="mb-4">{initError}</p>
+                  <button onClick={() => window.location.reload()} className="bg-slate-800 px-4 py-2 rounded text-white">Reintentar</button>
+              </div>
+          </div>
+      );
   }
 
   const isMaster = user?.role.toLowerCase().includes('master') || user?.email.includes('armin');
