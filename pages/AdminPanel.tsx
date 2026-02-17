@@ -1,9 +1,8 @@
-
 import React, { useState, useEffect } from 'react';
 import { User, WeekData, ClassSession } from '../types';
 import { updateUser, deleteUser, createUser, updateSession } from '../services/dataService';
 import { saveFirebaseConfig, isConfigured, resetFirebaseConfig } from '../firebaseConfig';
-import { Save, Search, Database, PlayCircle, Lock, Edit2, Users, Trash2, Plus, X, Video, FileText, Check, Loader2, Settings, AlertTriangle, LogOut } from 'lucide-react';
+import { Save, Search, Database, Lock, Edit2, Users, Trash2, Plus, X, Video, Check, Loader2, Settings, AlertTriangle, LogOut } from 'lucide-react';
 
 interface AdminPanelProps {
   users: User[]; 
@@ -29,7 +28,6 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ users, content, onRefresh }) =>
   const [configJson, setConfigJson] = useState('');
 
   useEffect(() => {
-      // Si no está configurado, forzar vista de config
       if (!isConfigured) {
           setActiveTab('config');
       }
@@ -73,12 +71,12 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ users, content, onRefresh }) =>
       if(!newUser.email || !newUser.name) return alert("Faltan datos");
       try {
           const u: User = {
-              id: newUser.email, // ID temporal
+              id: newUser.email,
               email: newUser.email,
               name: newUser.name,
               role: newUser.role || 'Estudiante',
               password: newUser.password || '1234',
-              avatar: newUser.name.charAt(0).toUpperCase(),
+              avatar: (newUser.name || 'A').charAt(0).toUpperCase(),
               stats: { prompting: 50, tools: 50, analysis: 50 },
               progress: { completed: 0, total: 12 },
               progress_details: {}
@@ -99,7 +97,6 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ users, content, onRefresh }) =>
       
       setIsSaving(true);
       
-      // Llamamos al servicio actualizado que devuelve true/false
       const success = await updateSession(editingSession);
       
       setIsSaving(false);
@@ -113,9 +110,9 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ users, content, onRefresh }) =>
       }
   };
 
-  const filteredUsers = users.filter(u => 
-      u.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-      u.email.toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredUsers = (users || []).filter(u => 
+      (u.name && u.name.toLowerCase().includes(searchTerm.toLowerCase())) || 
+      (u.email && u.email.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   return (
@@ -178,7 +175,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ users, content, onRefresh }) =>
                 <div className="space-y-4">
                     <div>
                         <label className="block text-sm font-bold text-slate-400 mb-2">Pegar Objeto JSON de Firebase Config</label>
-                        <p className="text-xs text-slate-500 mb-2">Ve a Console Firebase {'>'} Project Settings {'>'} General {'>'} Your Apps {'>'} SDK Setup and Configuration (Config) y copia el objeto `const firebaseConfig = { ... }` (solo lo que está entre llaves).</p>
+                        <p className="text-xs text-slate-500 mb-2">Ve a Console Firebase {'>'} Project Settings {'>'} General {'>'} Your Apps {'>'} SDK Setup and Configuration (Config) y copia el objeto `const firebaseConfig = ...` (solo lo que está entre llaves).</p>
                         <textarea 
                             className="w-full bg-black border border-slate-700 rounded-xl p-4 font-mono text-xs text-green-400 h-48 focus:border-cobol outline-none"
                             placeholder={'{\n  "apiKey": "AIzaSy...",\n  "authDomain": "...",\n  "projectId": "..."\n}'}
@@ -273,7 +270,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ users, content, onRefresh }) =>
                                             <input 
                                                 type="text" 
                                                 value={u.password || ''}
-                                                onChange={(e) => {}}
+                                                onChange={() => {}} 
                                                 onBlur={(e) => {
                                                     if(e.target.value !== u.password) handleSaveUser({...u, password: e.target.value});
                                                 }}
