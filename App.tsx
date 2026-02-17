@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/Layout';
@@ -8,10 +7,11 @@ import Classes from './pages/Classes';
 import Students from './pages/Students';
 import Guide from './pages/Guide';
 import AdminPanel from './pages/AdminPanel';
-import CloudConnectionWizard from './components/CloudConnectionWizard'; // Nuevo componente
 import { User, WeekData } from './types';
 import { getUsers, getContent, saveUserProgress, seedDatabaseIfEmpty } from './services/dataService';
 import { isConfigured } from './firebaseConfig';
+import { Database, AlertTriangle } from 'lucide-react';
+import CloudConnectionWizard from './components/CloudConnectionWizard';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -20,8 +20,7 @@ const App: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [initError, setInitError] = useState('');
 
-  // 1. CHEQUEO DE CONFIGURACIÓN DE NUBE
-  // Si no está configurado, mostramos el Wizard inmediatamente.
+  // 🔴 PANTALLA DE BLOQUEO SI NO HAY CREDENCIALES
   if (!isConfigured) {
       return <CloudConnectionWizard />;
   }
@@ -41,7 +40,7 @@ const App: React.FC = () => {
     setInitError('');
     
     try {
-        // Intento de conexión real
+        // Intento de conexión y sembrado de datos
         await seedDatabaseIfEmpty();
 
         const [fetchedUsers, fetchedContent] = await Promise.all([
@@ -64,7 +63,7 @@ const App: React.FC = () => {
         }
     } catch (e: any) {
         console.error("Error cargando datos:", e);
-        setInitError("Error conectando a Google Cloud. Verifique su conexión.");
+        setInitError("Verificando conexión a base de datos..."); 
     } finally {
         if (isInitial) setLoading(false);
     }
@@ -95,21 +94,22 @@ const App: React.FC = () => {
             <div className="absolute inset-0 flex items-center justify-center text-xs animate-pulse">AFRI</div>
         </div>
         <div className="text-center space-y-2">
-            <p className="tracking-[0.3em] uppercase text-sm font-bold terminal-text">Conectando a Nube...</p>
+            <p className="tracking-[0.3em] uppercase text-sm font-bold terminal-text">Conectando...</p>
             <p className="text-[10px] text-slate-500">Google Cloud Firestore</p>
         </div>
       </div>
     );
   }
 
-  // Si falló la carga inicial (ej. internet caído)
-  if (initError) {
+  // Si hay error de inicialización
+  if (initError && !user) {
       return (
-          <div className="min-h-screen bg-black flex items-center justify-center text-red-500 font-mono p-4 text-center">
-              <div>
-                  <h2 className="text-xl font-bold mb-2">Error de Conexión</h2>
-                  <p className="mb-4">{initError}</p>
-                  <button onClick={() => window.location.reload()} className="bg-slate-800 px-4 py-2 rounded text-white">Reintentar</button>
+          <div className="min-h-screen bg-black flex items-center justify-center p-4">
+              <div className="bg-red-900/10 border border-red-500/50 p-6 rounded-xl text-center max-w-md">
+                  <AlertTriangle className="mx-auto text-red-500 mb-4" size={32} />
+                  <h2 className="text-xl font-bold text-white mb-2">Error de Conexión</h2>
+                  <p className="text-slate-400 text-sm mb-4">{initError}</p>
+                  <button onClick={() => window.location.reload()} className="bg-red-600 hover:bg-red-500 text-white px-6 py-2 rounded-lg font-bold">Reintentar</button>
               </div>
           </div>
       );
