@@ -1,9 +1,10 @@
+
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AFRI | COBOL & AI Evolution</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>AFRI | Portal de IA Corporativa</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -21,6 +22,7 @@
                         secondary: '#8b5cf6',
                         cobol: '#4ade80', 
                         dark: '#030712',
+                        darker: '#000000',
                         surface: '#0f172a',
                         terminal: '#000000'
                     },
@@ -28,6 +30,7 @@
                         'pulse-glow': 'pulseGlow 2s ease-in-out infinite',
                         'scanline': 'scanline 8s linear infinite',
                         'float': 'float 4s ease-in-out infinite',
+                        'spin-slow': 'spin 8s linear infinite',
                     },
                     keyframes: {
                         pulseGlow: {
@@ -42,12 +45,16 @@
                             '0%, 100%': { transform: 'translateY(0)' },
                             '50%': { transform: 'translateY(-10px)' }
                         }
+                    },
+                    padding: {
+                        'safe': 'env(safe-area-inset-bottom)'
                     }
                 }
             }
         }
     </script>
     <style>
+        body { background-color: #000; overflow-x: hidden; }
         .mainframe-border {
             border: 1px solid rgba(74, 222, 128, 0.2);
             box-shadow: 0 0 10px rgba(74, 222, 128, 0.05);
@@ -63,16 +70,12 @@
             color: #4ade80;
             text-shadow: 0 0 5px rgba(74, 222, 128, 0.5);
         }
-
-        .neon-btn {
-            position: relative;
-            overflow: hidden;
-            transition: all 0.3s ease;
-        }
-
-        .neon-btn:hover {
-            box-shadow: 0 0 15px rgba(59, 130, 246, 0.5);
-            transform: translateY(-1px);
+        
+        .ai-gradient-text {
+            background: linear-gradient(to right, #3b82f6, #8b5cf6, #4ade80);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
         }
 
         ::-webkit-scrollbar { width: 6px; }
@@ -86,23 +89,29 @@
             background: rgba(74, 222, 128, 0.1);
             animation: scanline 4s linear infinite;
             pointer-events: none;
+            z-index: 50;
         }
+        
+        /* Mobile Optimizations */
+        .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
     </style>
 <script type="importmap">
 {
   "imports": {
-    "react/": "https://esm.sh/react@^19.2.3/",
-    "react": "https://esm.sh/react@^19.2.3",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
-    "@google/genai": "https://esm.sh/@google/genai@^1.34.0",
-    "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
-    "react-router-dom": "https://esm.sh/react-router-dom@^7.11.0",
-    "firebase/": "https://esm.sh/firebase@^12.9.0/"
+    "react/": "https://esm.sh/react@^18.2.0/",
+    "react": "https://esm.sh/react@^18.2.0",
+    "react-dom/": "https://esm.sh/react-dom@^18.2.0/",
+    "react-dom": "https://esm.sh/react-dom@^18.2.0",
+    "@google/genai": "https://esm.sh/@google/genai@^0.1.1",
+    "lucide-react": "https://esm.sh/lucide-react@^0.300.0",
+    "react-router-dom": "https://esm.sh/react-router-dom@^6.21.1",
+    "firebase/": "https://esm.sh/firebase@^10.7.1/",
+    "@firebase/app": "https://esm.sh/@firebase/app@^0.14.8"
   }
 }
 </script>
 </head>
-<body class="bg-dark text-slate-200 antialiased font-sans">
-    <div id="root"></div>
+<body class="bg-darker text-slate-200 antialiased font-sans h-full">
+    <div id="root" class="h-full"></div>
 </body>
 </html>

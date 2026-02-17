@@ -1,14 +1,13 @@
-import firebase from 'firebase/compat/app';
+import { initializeApp } from '@firebase/app';
 import { getFirestore } from 'firebase/firestore';
 
 // ============================================================================
-// 🟢 CONFIGURACIÓN DINÁMICA
+// 🟢 CONFIGURACIÓN FIREBASE (MODULAR)
 // ============================================================================
 
 const LOCAL_STORAGE_KEY = 'afri_firebase_config';
 
-// 1. Configuración por defecto (Placeholder)
-// Se usa 'let' para permitir que sea sobrescrita por localStorage si existe
+// 1. Credenciales fijas (Las que proporcionaste)
 let firebaseConfig = {
   apiKey: "AIzaSyDJbnvOYPKmYQV-tfOxwOcuKs8nfleo6JU",
   authDomain: "afri-portal-ia.firebaseapp.com",
@@ -18,12 +17,13 @@ let firebaseConfig = {
   appId: "1:729525336557:web:997734e254066984420fe4"
 };
 
-// 2. Intentar cargar configuración guardada localmente (si el usuario usó el Wizard)
+// 2. Sobrescribir si hay configuración manual guardada (opcional)
 try {
     const saved = typeof window !== 'undefined' ? localStorage.getItem(LOCAL_STORAGE_KEY) : null;
     if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed && parsed.apiKey) {
+            console.log("⚡ [SYSTEM] Usando configuración personalizada desde LocalStorage");
             firebaseConfig = parsed;
         }
     }
@@ -32,7 +32,7 @@ try {
 }
 
 // ============================================================================
-// ⚙️ INICIALIZACIÓN DEL SISTEMA
+// ⚙️ INICIALIZACIÓN
 // ============================================================================
 
 let app;
@@ -40,31 +40,27 @@ let db: any;
 let isConfigured = false;
 
 try {
-    // Validamos que exista una apiKey
-    if (firebaseConfig.apiKey) {
-        // Initialize using compat to resolve import issues
-        app = firebase.initializeApp(firebaseConfig);
-        // Get the default modular Firestore instance (compatible with dataService.ts)
-        db = getFirestore(); 
+    if (firebaseConfig.apiKey && firebaseConfig.apiKey !== "PEGA_TU_API_KEY_AQUI") {
+        // Inicialización Modular Estándar
+        app = initializeApp(firebaseConfig);
+        db = getFirestore(app); 
         isConfigured = true;
-        console.log("✅ [SYSTEM] Base de Datos Google Cloud CONECTADA.");
+        console.log("✅ [SYSTEM] Firebase Modular SDK Inicializado correctamente.");
     } else {
-        console.warn("⚠️ [SYSTEM] Credenciales no detectadas. El sistema funcionará en modo limitado.");
+        console.warn("⚠️ [SYSTEM] Falta API Key válida.");
         isConfigured = false; 
     }
 } catch (error) {
-    console.error("❌ [SYSTEM] Error crítico de conexión a Firebase:", error);
+    console.error("❌ [SYSTEM] Fallo crítico al inicializar Firebase:", error);
     isConfigured = false;
 }
 
-// Función para guardar configuración desde el Wizard UI
 export const saveCloudConfig = (config: any) => {
     try {
         localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(config));
         window.location.reload();
     } catch (e) {
-        console.error("Error saving config", e);
-        alert("No se pudo guardar la configuración localmente.");
+        alert("Error guardando configuración local.");
     }
 };
 

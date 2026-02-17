@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/Layout';
@@ -10,7 +11,7 @@ import AdminPanel from './pages/AdminPanel';
 import { User, WeekData } from './types';
 import { getUsers, getContent, saveUserProgress, seedDatabaseIfEmpty } from './services/dataService';
 import { isConfigured } from './firebaseConfig';
-import { Database, AlertTriangle } from 'lucide-react';
+import { Database, AlertTriangle, WifiOff } from 'lucide-react';
 import CloudConnectionWizard from './components/CloudConnectionWizard';
 
 const App: React.FC = () => {
@@ -39,22 +40,34 @@ const App: React.FC = () => {
     if (isInitial) setLoading(true);
     setInitError('');
     
-    try {
-        // Intento de conexión y sembrado de datos
-        await seedDatabaseIfEmpty();
+    // TEMPORIZADOR DE SEGURIDAD: Si Firebase no responde en 8 segundos, desbloquear la app.
+    const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error("Tiempo de espera agotado. Verifica tu conexión.")), 8000)
+    );
 
-        const [fetchedUsers, fetchedContent] = await Promise.all([
-            getUsers(),
-            getContent()
-        ]);
+    try {
+        console.log("📡 [APP] Iniciando conexión a datos...");
         
-        setUsers(fetchedUsers);
-        setContent(fetchedContent);
+        // Ejecutamos la carga de datos compitiendo contra el timeout
+        await Promise.race([
+            (async () => {
+                await seedDatabaseIfEmpty();
+                const [fetchedUsers, fetchedContent] = await Promise.all([
+                    getUsers(),
+                    getContent()
+                ]);
+                setUsers(fetchedUsers);
+                setContent(fetchedContent);
+                console.log("✅ [APP] Datos cargados exitosamente.");
+            })(),
+            timeoutPromise
+        ]);
 
         // Restaurar sesión
         const storedEmail = localStorage.getItem('simpledata_user_email');
         if (storedEmail) {
-            const currentUserData = fetchedUsers.find(u => u.email === storedEmail);
+            const currentUserData = users.find(u => u.email === storedEmail) || 
+                                    (await getUsers()).find(u => u.email === storedEmail); // Doble chequeo
             if (currentUserData) {
                  setUser(currentUserData);
             } else {
@@ -62,8 +75,8 @@ const App: React.FC = () => {
             }
         }
     } catch (e: any) {
-        console.error("Error cargando datos:", e);
-        setInitError("Verificando conexión a base de datos..."); 
+        console.error("❌ [APP] Error cargando datos:", e);
+        setInitError(e.message || "Error de conexión con la base de datos."); 
     } finally {
         if (isInitial) setLoading(false);
     }
@@ -89,27 +102,35 @@ const App: React.FC = () => {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center text-cobol flex-col gap-6 font-mono relative overflow-hidden">
         <div className="scanline-effect"></div>
-        <div className="relative">
-            <div className="w-20 h-20 border-2 border-cobol/20 border-t-cobol rounded-full animate-spin"></div>
-            <div className="absolute inset-0 flex items-center justify-center text-xs animate-pulse">AFRI</div>
-        </div>
-        <div className="text-center space-y-2">
-            <p className="tracking-[0.3em] uppercase text-sm font-bold terminal-text">Conectando...</p>
-            <p className="text-[10px] text-slate-500">Google Cloud Firestore</p>
+        <div className="relative z-10 flex flex-col items-center">
+            <div className="w-24 h-24 border-4 border-cobol/20 border-t-cobol rounded-full animate-spin mb-4"></div>
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-[calc(50%+8px)] text-xs font-bold animate-pulse text-white">AFRI</div>
+            <p className="tracking-[0.3em] uppercase text-sm font-bold terminal-text animate-pulse">Conectando Nube...</p>
+            <p className="text-[10px] text-slate-500 mt-2">Google Cloud Firestore</p>
         </div>
       </div>
     );
   }
 
-  // Si hay error de inicialización
-  if (initError && !user) {
+  // PANTALLA DE ERROR DE CONEXIÓN (Reintentar)
+  if (initError && !user && users.length === 0) {
       return (
-          <div className="min-h-screen bg-black flex items-center justify-center p-4">
-              <div className="bg-red-900/10 border border-red-500/50 p-6 rounded-xl text-center max-w-md">
-                  <AlertTriangle className="mx-auto text-red-500 mb-4" size={32} />
-                  <h2 className="text-xl font-bold text-white mb-2">Error de Conexión</h2>
-                  <p className="text-slate-400 text-sm mb-4">{initError}</p>
-                  <button onClick={() => window.location.reload()} className="bg-red-600 hover:bg-red-500 text-white px-6 py-2 rounded-lg font-bold">Reintentar</button>
+          <div className="min-h-screen bg-black flex items-center justify-center p-6 font-mono">
+              <div className="bg-slate-900 border border-red-900/50 p-8 rounded-2xl max-w-md w-full text-center shadow-2xl relative overflow-hidden">
+                  <div className="absolute inset-0 bg-red-500/5 pointer-events-none"></div>
+                  <WifiOff className="mx-auto text-red-500 mb-6" size={48} />
+                  <h2 className="text-2xl font-bold text-white mb-2">Error de Conexión</h2>
+                  <p className="text-slate-400 text-sm mb-6 leading-relaxed">
+                      No se pudo establecer comunicación con la base de datos de AFRI.
+                      <br/>
+                      <span className="text-[10px] opacity-70 mt-2 block font-mono bg-black/30 p-2 rounded text-red-300">{initError}</span>
+                  </p>
+                  <button 
+                    onClick={() => window.location.reload()} 
+                    className="w-full bg-red-600 hover:bg-red-500 text-white font-bold py-3 rounded-xl transition-colors shadow-lg shadow-red-900/20"
+                  >
+                    REINTENTAR AHORA
+                  </button>
               </div>
           </div>
       );
