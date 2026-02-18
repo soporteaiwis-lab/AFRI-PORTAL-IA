@@ -9,7 +9,8 @@ interface DashboardProps {
 
 const Dashboard: React.FC<DashboardProps> = ({ user }) => {
   const percentage = Math.round((user.progress.completed / user.progress.total) * 100);
-  const isMaster = user.role.toLowerCase().includes('master') || user.email.includes('armin');
+  // Verificación específica para soporte.aiwis@gmail.com
+  const isMaster = user.role.toLowerCase().includes('master') || user.email === 'soporte.aiwis@gmail.com';
 
   return (
     <div className="animate-in fade-in duration-700 relative">
@@ -101,7 +102,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
                     </div>
                     <div>
                         <h3 className="text-xl font-black text-white mb-2">ADMIN_ZONE</h3>
-                        <p className="text-slate-400 text-xs mb-4">Gestión de usuarios y base de datos.</p>
+                        <p className="text-slate-400 text-xs mb-4">Gestión de usuarios y base de datos (AIWIS).</p>
                     </div>
                     <Link to="/admin" className="w-full">
                         <button className="w-full py-3 bg-red-600/20 hover:bg-red-600 text-red-200 hover:text-white border border-red-500/50 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all">

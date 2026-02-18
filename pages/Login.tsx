@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { User } from '../types';
 import { ChevronRight, Users as UsersIcon, Lock, AlertCircle, ShieldCheck } from 'lucide-react';
@@ -30,16 +29,16 @@ const Login: React.FC<LoginProps> = ({ onLogin, users }) => {
         u.name.toLowerCase() === cleanId
     );
     
-    // Backdoor de emergencia SOLO si no se encuentra en DB y es el admin principal
-    if (!user && (cleanId === 'armin@aiwis.cl' || cleanId.includes('armin'))) {
-         setError('Usuario Admin no encontrado en DB. Creando sesión temporal...');
-         // Esto no debería pasar si seedDatabaseIfEmpty funciona bien, pero es un seguro.
+    // Backdoor de emergencia SOLO si no se encuentra en DB y es el admin principal (soporte.aiwis@gmail.com)
+    if (!user && (cleanId === 'soporte.aiwis@gmail.com')) {
+         setError('Usuario Master no encontrado en DB local. Creando sesión de recuperación...');
+         
          const tempMaster: User = {
-            id: 'root-master-emergency',
-            email: 'armin@aiwis.cl',
-            name: 'Armin W Salazar',
+            id: 'root-master-recovery',
+            email: 'soporte.aiwis@gmail.com',
+            name: 'Soporte AIWIS',
             role: 'Master Root',
-            avatar: 'A',
+            avatar: 'S',
             password: '1234',
             stats: { prompting: 100, tools: 100, analysis: 100 },
             progress: { completed: 0, total: 12 },
@@ -70,7 +69,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, users }) => {
   };
 
   const handleMasterAutoFill = () => {
-      setIdentifier("armin@aiwis.cl");
+      setIdentifier("soporte.aiwis@gmail.com");
       setPassword("1234"); 
   };
 
@@ -88,7 +87,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, users }) => {
           </div>
           <h1 className="text-3xl font-bold text-white mb-2 tracking-tight">AFRI PORTAL</h1>
           <p className="text-slate-400">
-            {isConfigured ? 'Acceso Corporativo (Nube)' : 'Acceso Interno (Local DB)'}
+            {isConfigured ? 'Acceso Corporativo AIWIS (Nube)' : 'Acceso Interno (Local DB)'}
           </p>
         </div>
 
@@ -100,7 +99,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, users }) => {
                     type="text" 
                     value={identifier}
                     onChange={(e) => setIdentifier(e.target.value)}
-                    placeholder="Correo (armin@aiwis.cl)"
+                    placeholder="Correo (soporte.aiwis@gmail.com)"
                     className="w-full bg-slate-900 border border-slate-700 rounded-xl pl-12 pr-4 py-4 text-white focus:outline-none focus:border-primary transition-colors"
                     required
                   />
@@ -146,7 +145,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, users }) => {
                 className="text-xs text-cobol hover:text-white transition-colors flex items-center justify-center gap-2 mx-auto border border-cobol/20 px-3 py-1.5 rounded-full hover:bg-cobol/10"
             >
                 <ShieldCheck size={12} />
-                🔐 Autocompletar Root
+                🔐 Autocompletar Master Root
             </button>
         </div>
       </div>

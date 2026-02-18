@@ -1,11 +1,22 @@
 import { GoogleGenAI, Type } from "@google/genai";
 
-// Initialization with environment variable as per strict guidelines
-const apiKey = process.env.API_KEY; 
+// Inicialización segura para entornos de navegador donde 'process' no existe
+const getApiKey = () => {
+    try {
+        // @ts-ignore
+        return (typeof process !== 'undefined' && process.env) ? process.env.API_KEY : '';
+    } catch (e) {
+        return '';
+    }
+};
+
+const apiKey = getApiKey();
 let ai: GoogleGenAI | null = null;
 
 if (apiKey) {
     ai = new GoogleGenAI({ apiKey });
+} else {
+    console.warn("⚠️ [AI SERVICE] No API Key found. AI features will be disabled.");
 }
 
 export interface QuizQuestion {
@@ -21,7 +32,7 @@ export const generateTutorResponse = async (
 ): Promise<string> => {
     
     if (!ai) {
-        return "El servicio de IA no está disponible actualmente.";
+        return "El servicio de IA no está activo (Falta API Key). Contacta al administrador.";
     }
 
     try {

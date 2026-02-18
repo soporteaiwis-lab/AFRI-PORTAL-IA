@@ -61,7 +61,22 @@ const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    // Intentar cargar datos
     loadData();
+
+    // FAILSAFE: Si por alguna razón (firewall, error de red silencioso) la carga
+    // se queda pegada más de 3 segundos, forzamos la entrada para evitar pantalla negra.
+    const safetyTimer = setTimeout(() => {
+        setLoading((currentLoading) => {
+            if (currentLoading) {
+                console.warn("⚠️ [APP] Carga lenta detectada. Forzando inicio de UI.");
+                return false;
+            }
+            return false;
+        });
+    }, 3000);
+
+    return () => clearTimeout(safetyTimer);
   }, [loadData]);
 
   const handleUpdateProgress = async (count: number, progressJson: Record<string, boolean>) => {
@@ -89,7 +104,8 @@ const App: React.FC = () => {
     );
   }
 
-  const isMaster = user?.role.toLowerCase().includes('master') || user?.email.includes('armin');
+  // Lógica de seguridad para Master Root
+  const isMaster = user?.role.toLowerCase().includes('master') || user?.email === 'soporte.aiwis@gmail.com';
   const videoMap: Record<string, string> = {}; 
 
   return (

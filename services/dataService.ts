@@ -7,14 +7,14 @@ import { COURSE_CONTENT } from '../constants';
 const LOCAL_USERS_KEY = 'afri_local_users';
 const LOCAL_CONTENT_KEY = 'afri_local_content';
 
-// USUARIO ADMIN POR DEFECTO (Para inicio inmediato)
+// USUARIO ADMIN POR DEFECTO (MASTER ROOT - SOPORTE AIWIS)
 const ROOT_ADMIN: User = {
-    id: 'root-admin',
-    email: 'armin@aiwis.cl',
-    name: 'Armin W Salazar',
+    id: 'root-admin-master',
+    email: 'soporte.aiwis@gmail.com',
+    name: 'Soporte AIWIS',
     role: 'Master Root',
-    avatar: 'A',
-    password: '1234',
+    avatar: 'S',
+    password: '1234', // Contraseña inicial por defecto
     stats: { prompting: 100, tools: 100, analysis: 100 },
     progress: { completed: 0, total: 12 },
     progress_details: {}
@@ -47,21 +47,49 @@ const getFromLocal = (key: string): any | null => {
 export const seedDatabaseIfEmpty = async () => {
     // 1. Asegurar datos locales MÍNIMOS para que la app arranque
     let localUsers = getFromLocal(LOCAL_USERS_KEY);
-    if (!localUsers || localUsers.length === 0) {
-        console.log("⚡ [DATA] Sembrando datos locales por defecto...");
-        localUsers = [ROOT_ADMIN];
+    
+    // Verificamos si el admin correcto existe en los datos locales, si no, forzamos la actualización
+    const adminExists = localUsers && localUsers.some((u: User) => u.email === ROOT_ADMIN.email);
+
+    if (!localUsers || localUsers.length === 0 || !adminExists) {
+        console.log("⚡ [DATA] Sembrando datos locales con cuenta MAESTRA: soporte.aiwis@gmail.com...");
+        
+        // Si ya había usuarios pero no estaba el admin, lo agregamos conservando los otros
+        if (localUsers && localUsers.length > 0) {
+             localUsers.push(ROOT_ADMIN);
+        } else {
+             localUsers = [ROOT_ADMIN];
+        }
+        
         saveToLocal(LOCAL_USERS_KEY, localUsers);
-        saveToLocal(LOCAL_CONTENT_KEY, COURSE_CONTENT);
+        
+        // Si no hay contenido, lo creamos
+        const localContent = getFromLocal(LOCAL_CONTENT_KEY);
+        if (!localContent) {
+            saveToLocal(LOCAL_CONTENT_KEY, COURSE_CONTENT);
+        }
     }
 
     // 2. Intentar sincronizar nube si hay conexión
     if (isConfigured && db) {
         try {
-            const usersSnap = await getDocs(collection(db, 'users'));
-            if (usersSnap.empty) {
-                console.log("☁️ [CLOUD] Subiendo semilla a la nube...");
+            // Verificar si el usuario Master existe en la nube
+            const masterDoc = await getDocs(collection(db, 'users'));
+            let masterFound = false;
+            masterDoc.forEach(doc => {
+                if (doc.id === ROOT_ADMIN.email) masterFound = true;
+            });
+
+            if (!masterFound) {
+                console.log("☁️ [CLOUD] Inicializando cuenta Master Root en Firebase...");
+                await setDoc(doc(db, 'users', ROOT_ADMIN.email), ROOT_ADMIN);
+            }
+            
+            // Verificar contenido base
+            const contentSnap = await getDocs(collection(db, 'content'));
+            if (contentSnap.empty) {
+                console.log("☁️ [CLOUD] Subiendo estructura del curso...");
                 const batch = writeBatch(db);
-                batch.set(doc(db, 'users', ROOT_ADMIN.email), ROOT_ADMIN);
                 COURSE_CONTENT.forEach(week => {
                     batch.set(doc(db, 'content', `week-${week.id}`), week);
                 });
@@ -140,6 +168,11 @@ export const updateUser = async (user: User) => createUser(user);
 
 // --- BORRAR USUARIO ---
 export const deleteUser = async (email: string) => {
+    // Evitar borrar al Master Root
+    if (email === ROOT_ADMIN.email) {
+        throw new Error("No se puede eliminar al usuario Master Root del sistema.");
+    }
+
     // 1. Local
     const users = await getUsers();
     const filtered = users.filter(u => u.email !== email);

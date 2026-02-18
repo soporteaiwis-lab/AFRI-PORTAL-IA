@@ -13,7 +13,7 @@ interface LayoutProps {
 const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
   if (!user) return <>{children}</>;
 
-  const isMaster = user.role.toLowerCase().includes('master') || user.email.includes('armin');
+  const isMaster = user.role.toLowerCase().includes('master') || user.email === 'soporte.aiwis@gmail.com';
 
   const navItems = [
     { to: '/', icon: Home, label: 'CMD_DASHBOARD' },

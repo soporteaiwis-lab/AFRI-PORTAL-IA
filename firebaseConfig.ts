@@ -1,4 +1,4 @@
-import { initializeApp } from '@firebase/app';
+import * as firebaseApp from 'firebase/app';
 import { getFirestore, Firestore } from 'firebase/firestore';
 
 // ============================================================================
@@ -7,8 +7,7 @@ import { getFirestore, Firestore } from 'firebase/firestore';
 
 const CUSTOM_CONFIG_KEY = 'afri_firebase_custom_config';
 
-// 1. Configuración por defecto (Tus credenciales)
-// NOTA: Incluso si estas fallan, el sistema ahora usará LocalStorage.
+// 1. Configuración por defecto
 const defaultFirebaseConfig = {
   apiKey: "AIzaSyDJbnvOYPKmYQV-tfOxwOcuKs8nfleo6JU",
   authDomain: "afri-portal-ia.firebaseapp.com",
@@ -39,11 +38,20 @@ const getConfig = () => {
 
 try {
     // Intentamos inicializar con la configuración por defecto o la guardada
-    // Usamos un bloque try-catch estricto para que NUNCA rompa la app
-    app = initializeApp(getConfig());
-    db = getFirestore(app);
-    isConfigured = true;
-    console.log("✅ [SYSTEM] Intento de conexión a Firebase iniciado.");
+    // Usamos 'any' para soportar tanto modulos v9 como compatibilidad v8/types incorrectos
+    const fb: any = firebaseApp;
+    // Check for named export (v9) or default export (v8/compat)
+    const initFunc = fb.initializeApp || (fb.default && fb.default.initializeApp);
+    
+    if (initFunc) {
+        app = initFunc(getConfig());
+        db = getFirestore(app);
+        isConfigured = true;
+        console.log("✅ [SYSTEM] Intento de conexión a Firebase iniciado.");
+    } else {
+        throw new Error("No se encontró la función initializeApp de Firebase.");
+    }
+
 } catch (error: any) {
     console.warn("⚠️ [SYSTEM] Modo Offline Activado. Error Firebase:", error.message);
     isConfigured = false;
