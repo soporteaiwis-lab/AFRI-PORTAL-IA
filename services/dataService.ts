@@ -1,17 +1,13 @@
-
 import { db, isConfigured } from '../firebaseConfig';
-import { collection, getDocs, doc, setDoc, updateDoc, getDoc, writeBatch, deleteDoc } from 'firebase/firestore';
+import { collection, getDocs, doc, setDoc, deleteDoc, writeBatch } from 'firebase/firestore';
 import { User, WeekData, ClassSession } from '../types';
 import { COURSE_CONTENT } from '../constants';
 
-// --- DATA SERVICE: PURE CLOUD (NO CACHE FALLBACK) ---
-// Este servicio ahora exige conexión a internet y configuración válida.
-// Si no hay nube, lanza error. Esto garantiza que si guarda, guarda en la DB.
+// CONSTANTES LOCALES
+const LOCAL_USERS_KEY = 'afri_local_users';
+const LOCAL_CONTENT_KEY = 'afri_local_content';
 
-const USERS_COLLECTION = 'users';
-const CONTENT_COLLECTION = 'content';
-
-// --- SEMILLA INICIAL ---
+// USUARIO ADMIN POR DEFECTO (Para inicio inmediato)
 const ROOT_ADMIN: User = {
     id: 'root-admin',
     email: 'armin@aiwis.cl',
@@ -25,122 +21,174 @@ const ROOT_ADMIN: User = {
 };
 
 // ==========================================
-// SERVICIOS PÚBLICOS (CLOUD ONLY)
+// 🧠 CEREBRO DE DATOS HÍBRIDO
 // ==========================================
 
-const ensureConnection = () => {
-    if (!isConfigured || !db) {
-        throw new Error("⛔ ERROR CRÍTICO: No hay conexión a la Base de Datos Google Cloud. Configure las credenciales.");
+// Helper para guardar en localStorage
+const saveToLocal = (key: string, data: any) => {
+    try {
+        localStorage.setItem(key, JSON.stringify(data));
+    } catch (e) {
+        console.error("Error guardando en LocalStorage", e);
     }
 };
 
+// Helper para leer de localStorage
+const getFromLocal = (key: string): any | null => {
+    try {
+        const item = localStorage.getItem(key);
+        return item ? JSON.parse(item) : null;
+    } catch (e) {
+        return null;
+    }
+};
+
+// --- INICIALIZACIÓN DE DATOS ---
 export const seedDatabaseIfEmpty = async () => {
-    ensureConnection();
-    try {
-        const usersSnap = await getDocs(collection(db, USERS_COLLECTION));
-        
-        if (usersSnap.empty) {
-            console.log("⚡ [CLOUD] Inicializando base de datos vacía en la nube...");
-            const batch = writeBatch(db);
-            
-            // Crear Admin por defecto
-            const adminRef = doc(db, USERS_COLLECTION, ROOT_ADMIN.email);
-            batch.set(adminRef, ROOT_ADMIN);
-            
-            // Crear Estructura del Curso
-            COURSE_CONTENT.forEach(week => {
-                const weekRef = doc(db, CONTENT_COLLECTION, `week-${week.id}`);
-                batch.set(weekRef, week);
-            });
-            
-            await batch.commit();
-            console.log("✅ [CLOUD] Estructura base creada correctamente.");
-        }
-    } catch (e) {
-        console.error("❌ [CLOUD] Error al sembrar base de datos:", e);
-        throw e;
+    // 1. Asegurar datos locales MÍNIMOS para que la app arranque
+    let localUsers = getFromLocal(LOCAL_USERS_KEY);
+    if (!localUsers || localUsers.length === 0) {
+        console.log("⚡ [DATA] Sembrando datos locales por defecto...");
+        localUsers = [ROOT_ADMIN];
+        saveToLocal(LOCAL_USERS_KEY, localUsers);
+        saveToLocal(LOCAL_CONTENT_KEY, COURSE_CONTENT);
     }
-};
 
-export const getUsers = async (): Promise<User[]> => {
-    if (!isConfigured) return []; 
-    try {
-        const snapshot = await getDocs(collection(db, USERS_COLLECTION));
-        if (snapshot.empty) return [];
-        return snapshot.docs.map(doc => doc.data() as User);
-    } catch (e) {
-        console.error("Error obteniendo usuarios de Cloud:", e);
-        throw e;
-    }
-};
-
-export const getContent = async (): Promise<WeekData[]> => {
-    if (!isConfigured) return [];
-    try {
-        const snapshot = await getDocs(collection(db, CONTENT_COLLECTION));
-        if (snapshot.empty) return []; // Retornar vacío para forzar seed si es necesario
-        const data = snapshot.docs.map(doc => doc.data() as WeekData);
-        return data.sort((a, b) => a.id - b.id);
-    } catch (e) {
-        console.error("Error obteniendo contenido de Cloud:", e);
-        throw e;
-    }
-};
-
-export const createUser = async (user: User) => {
-    ensureConnection();
-    // Guardado directo en Firestore
-    await setDoc(doc(db, USERS_COLLECTION, user.email), user);
-};
-
-export const updateUser = async (user: User) => {
-    ensureConnection();
-    // Actualización directa en Firestore
-    await setDoc(doc(db, USERS_COLLECTION, user.email), user, { merge: true });
-};
-
-export const deleteUser = async (email: string) => {
-    ensureConnection();
-    // Borrado directo en Firestore
-    await deleteDoc(doc(db, USERS_COLLECTION, email));
-};
-
-export const updateSession = async (session: ClassSession) => {
-    ensureConnection();
-    try {
-        const weekRef = doc(db, CONTENT_COLLECTION, `week-${session.weekId}`);
-        const weekSnap = await getDoc(weekRef);
-        
-        if (weekSnap.exists()) {
-            const weekData = weekSnap.data() as WeekData;
-            const sessionIndex = weekData.sessions.findIndex(s => s.id === session.id);
-            
-            if (sessionIndex !== -1) {
-                // Actualizar array en memoria
-                weekData.sessions[sessionIndex] = {
-                        ...session,
-                        videoUrl: session.videoUrl || '',
-                        transcript: session.transcript || ''
-                };
-                // Sobrescribir documento semana en la nube
-                await setDoc(weekRef, weekData);
-                return true;
+    // 2. Intentar sincronizar nube si hay conexión
+    if (isConfigured && db) {
+        try {
+            const usersSnap = await getDocs(collection(db, 'users'));
+            if (usersSnap.empty) {
+                console.log("☁️ [CLOUD] Subiendo semilla a la nube...");
+                const batch = writeBatch(db);
+                batch.set(doc(db, 'users', ROOT_ADMIN.email), ROOT_ADMIN);
+                COURSE_CONTENT.forEach(week => {
+                    batch.set(doc(db, 'content', `week-${week.id}`), week);
+                });
+                await batch.commit();
             }
+        } catch (e) {
+            console.warn("⚠️ [DATA] No se pudo conectar a la nube. Usando modo local.");
         }
-        return false;
-    } catch (e) {
-        console.error("Error actualizando sesión en Cloud:", e);
-        throw e;
     }
 };
 
+// --- OBTENER USUARIOS ---
+export const getUsers = async (): Promise<User[]> => {
+    // Prioridad 1: Intentar Nube
+    if (isConfigured && db) {
+        try {
+            const snapshot = await getDocs(collection(db, 'users'));
+            if (!snapshot.empty) {
+                const cloudUsers = snapshot.docs.map(doc => doc.data() as User);
+                // Actualizar caché local
+                saveToLocal(LOCAL_USERS_KEY, cloudUsers);
+                return cloudUsers;
+            }
+        } catch (e) {
+            console.warn("⚠️ Error leyendo nube, cayendo a local.");
+        }
+    }
+
+    // Prioridad 2: LocalStorage
+    const local = getFromLocal(LOCAL_USERS_KEY);
+    return local || [ROOT_ADMIN];
+};
+
+// --- OBTENER CONTENIDO ---
+export const getContent = async (): Promise<WeekData[]> => {
+    if (isConfigured && db) {
+        try {
+            const snapshot = await getDocs(collection(db, 'content'));
+            if (!snapshot.empty) {
+                const cloudContent = snapshot.docs.map(doc => doc.data() as WeekData);
+                const sorted = cloudContent.sort((a, b) => a.id - b.id);
+                saveToLocal(LOCAL_CONTENT_KEY, sorted);
+                return sorted;
+            }
+        } catch (e) {
+             console.warn("⚠️ Error leyendo nube, cayendo a local.");
+        }
+    }
+    const local = getFromLocal(LOCAL_CONTENT_KEY);
+    return local || COURSE_CONTENT;
+};
+
+// --- CREAR / ACTUALIZAR USUARIO ---
+export const createUser = async (user: User) => {
+    // 1. Guardar Localmente (Instantáneo)
+    const users = await getUsers();
+    const existingIdx = users.findIndex(u => u.email === user.email);
+    if (existingIdx >= 0) {
+        users[existingIdx] = user;
+    } else {
+        users.push(user);
+    }
+    saveToLocal(LOCAL_USERS_KEY, users);
+
+    // 2. Guardar en Nube (Asíncrono)
+    if (isConfigured && db) {
+        try {
+            await setDoc(doc(db, 'users', user.email), user);
+        } catch (e) {
+            console.error("Error sync nube (create user)", e);
+        }
+    }
+};
+
+export const updateUser = async (user: User) => createUser(user);
+
+// --- BORRAR USUARIO ---
+export const deleteUser = async (email: string) => {
+    // 1. Local
+    const users = await getUsers();
+    const filtered = users.filter(u => u.email !== email);
+    saveToLocal(LOCAL_USERS_KEY, filtered);
+
+    // 2. Nube
+    if (isConfigured && db) {
+        try {
+            await deleteDoc(doc(db, 'users', email));
+        } catch (e) {
+            console.error("Error sync nube (delete user)", e);
+        }
+    }
+};
+
+// --- ACTUALIZAR SESIÓN (CONTENIDO) ---
+export const updateSession = async (session: ClassSession) => {
+    // 1. Local
+    const content = await getContent();
+    const week = content.find(w => w.id === session.weekId);
+    if (week) {
+        const sIdx = week.sessions.findIndex(s => s.id === session.id);
+        if (sIdx >= 0) {
+            week.sessions[sIdx] = session;
+            saveToLocal(LOCAL_CONTENT_KEY, content);
+            
+            // 2. Nube
+            if (isConfigured && db) {
+                try {
+                    await setDoc(doc(db, 'content', `week-${week.id}`), week);
+                } catch (e) {
+                    console.error("Error sync nube (update session)", e);
+                }
+            }
+            return true;
+        }
+    }
+    return false;
+};
+
+// --- GUARDAR PROGRESO ---
 export const saveUserProgress = async (user: User, progressJson: Record<string, boolean>) => {
-    ensureConnection();
-    const count = Object.values(progressJson).filter(v => v).length;
-    
-    const userRef = doc(db, USERS_COLLECTION, user.email);
-    await updateDoc(userRef, {
-        "progress.completed": count,
-        "progress_details": progressJson
-    });
+    const updatedUser = {
+        ...user,
+        progress: {
+            completed: Object.values(progressJson).filter(v => v).length,
+            total: 12
+        },
+        progress_details: progressJson
+    };
+    await updateUser(updatedUser);
 };

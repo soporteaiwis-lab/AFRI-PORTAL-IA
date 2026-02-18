@@ -2,7 +2,7 @@
 import React, { useState, useRef } from 'react';
 import { User, WeekData, ClassSession } from '../types';
 import { updateUser, deleteUser, createUser, updateSession } from '../services/dataService';
-import { Save, Search, Database, Lock, Edit2, Users, Trash2, Plus, X, Video, Loader2, HardDrive, Download, Upload, AlertTriangle, ShieldCheck, Mail, Type } from 'lucide-react';
+import { Save, Search, Database, Lock, Edit2, Users, Trash2, Plus, X, Video, Loader2, HardDrive, Download, Upload, AlertTriangle, ShieldCheck, Mail, Type, Table, FileJson, Eye, Link as LinkIcon, Check, Minus } from 'lucide-react';
 
 interface AdminPanelProps {
   users: User[]; 
@@ -11,7 +11,7 @@ interface AdminPanelProps {
 }
 
 const AdminPanel: React.FC<AdminPanelProps> = ({ users, content, onRefresh }) => {
-  const [activeTab, setActiveTab] = useState<'users' | 'content' | 'backup'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'content' | 'backup' | 'inspector'>('users');
   
   // --- USER MANAGEMENT STATE ---
   const [searchTerm, setSearchTerm] = useState('');
@@ -26,6 +26,9 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ users, content, onRefresh }) =>
 
   // --- BACKUP STATE ---
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // --- INSPECTOR STATE ---
+  const [inspectorView, setInspectorView] = useState<'users' | 'sessions'>('users');
 
   // ============================
   // USER FUNCTIONS
@@ -158,9 +161,22 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ users, content, onRefresh }) =>
       reader.readAsText(file);
   };
 
+  // ============================
+  // HELPERS
+  // ============================
+
   const filteredUsers = (users || []).filter(u => 
       (u.name && u.name.toLowerCase().includes(searchTerm.toLowerCase())) || 
       (u.email && u.email.toLowerCase().includes(searchTerm.toLowerCase()))
+  );
+
+  // Flatten sessions for Inspector view
+  const flatSessions = content.flatMap(week => 
+    week.sessions.map(session => ({
+        ...session,
+        weekId: week.id,
+        weekTitle: week.title
+    }))
   );
 
   return (
@@ -177,21 +193,24 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ users, content, onRefresh }) =>
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-4 mb-6 flex-wrap">
-            <button onClick={() => setActiveTab('users')} className={`px-6 py-3 rounded-xl font-bold flex items-center gap-2 transition-all shadow-lg ${activeTab === 'users' ? 'bg-primary text-white scale-105' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>
+        <div className="flex gap-4 mb-6 flex-wrap overflow-x-auto pb-2">
+            <button onClick={() => setActiveTab('users')} className={`px-6 py-3 rounded-xl font-bold flex items-center gap-2 transition-all shadow-lg whitespace-nowrap ${activeTab === 'users' ? 'bg-primary text-white scale-105' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>
                 <Users size={18} /> Usuarios
             </button>
-            <button onClick={() => setActiveTab('content')} className={`px-6 py-3 rounded-xl font-bold flex items-center gap-2 transition-all shadow-lg ${activeTab === 'content' ? 'bg-secondary text-white scale-105' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>
+            <button onClick={() => setActiveTab('content')} className={`px-6 py-3 rounded-xl font-bold flex items-center gap-2 transition-all shadow-lg whitespace-nowrap ${activeTab === 'content' ? 'bg-secondary text-white scale-105' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>
                 <Video size={18} /> Contenidos
             </button>
-            <button onClick={() => setActiveTab('backup')} className={`px-6 py-3 rounded-xl font-bold flex items-center gap-2 transition-all shadow-lg ml-auto ${activeTab === 'backup' ? 'bg-cobol text-black scale-105' : 'bg-slate-800 text-cobol border border-cobol/30 hover:bg-slate-700'}`}>
+            <button onClick={() => setActiveTab('inspector')} className={`px-6 py-3 rounded-xl font-bold flex items-center gap-2 transition-all shadow-lg whitespace-nowrap ${activeTab === 'inspector' ? 'bg-emerald-600 text-white scale-105' : 'bg-slate-800 text-emerald-500 hover:bg-slate-700'}`}>
+                <Table size={18} /> Inspector DB
+            </button>
+            <button onClick={() => setActiveTab('backup')} className={`px-6 py-3 rounded-xl font-bold flex items-center gap-2 transition-all shadow-lg ml-auto whitespace-nowrap ${activeTab === 'backup' ? 'bg-cobol text-black scale-105' : 'bg-slate-800 text-cobol border border-cobol/30 hover:bg-slate-700'}`}>
                 <Database size={18} /> Respaldo
             </button>
         </div>
 
         {/* --- TAB: USUARIOS --- */}
         {activeTab === 'users' && (
-            <div className="bg-surface border border-slate-700 rounded-2xl overflow-hidden shadow-xl">
+            <div className="bg-surface border border-slate-700 rounded-2xl overflow-hidden shadow-xl animate-in fade-in slide-in-from-bottom-4">
                 <div className="p-4 border-b border-slate-700 bg-slate-900/50 flex justify-between items-center flex-wrap gap-4">
                     <div className="relative max-w-md w-full">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
@@ -358,7 +377,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ users, content, onRefresh }) =>
 
         {/* --- TAB: CONTENIDOS --- */}
         {activeTab === 'content' && (
-            <div className="space-y-8">
+            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4">
                 {content.map(week => (
                     <div key={week.id} className="bg-surface border border-slate-700 rounded-2xl overflow-hidden">
                         <div className="bg-slate-900/80 p-4 border-b border-slate-700 flex justify-between items-center">
@@ -394,6 +413,93 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ users, content, onRefresh }) =>
                         </div>
                     </div>
                 ))}
+            </div>
+        )}
+
+        {/* --- TAB: INSPECTOR DB --- */}
+        {activeTab === 'inspector' && (
+            <div className="bg-slate-900 border border-slate-700 rounded-2xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-300">
+                <div className="p-2 bg-black border-b border-slate-700 flex gap-2 overflow-x-auto">
+                    <button 
+                        onClick={() => setInspectorView('users')} 
+                        className={`px-4 py-2 text-xs font-mono rounded flex items-center gap-2 ${inspectorView === 'users' ? 'bg-slate-800 text-white' : 'text-slate-500 hover:bg-slate-900'}`}
+                    >
+                        <Users size={14} /> TABLA_USUARIOS
+                    </button>
+                    <button 
+                         onClick={() => setInspectorView('sessions')} 
+                         className={`px-4 py-2 text-xs font-mono rounded flex items-center gap-2 ${inspectorView === 'sessions' ? 'bg-slate-800 text-white' : 'text-slate-500 hover:bg-slate-900'}`}
+                    >
+                        <FileJson size={14} /> TABLA_SESIONES_FLAT
+                    </button>
+                </div>
+                
+                <div className="overflow-auto max-h-[600px] scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-black">
+                    {inspectorView === 'users' && (
+                        <table className="w-full text-left border-collapse font-mono text-xs">
+                            <thead className="bg-slate-950 sticky top-0 z-10 shadow-lg">
+                                <tr>
+                                    <th className="p-3 border-b border-slate-700 text-slate-400">ID / EMAIL</th>
+                                    <th className="p-3 border-b border-slate-700 text-slate-400">NAME</th>
+                                    <th className="p-3 border-b border-slate-700 text-slate-400">ROLE</th>
+                                    <th className="p-3 border-b border-slate-700 text-slate-400">PASSWORD</th>
+                                    <th className="p-3 border-b border-slate-700 text-slate-400">STATS_JSON</th>
+                                    <th className="p-3 border-b border-slate-700 text-slate-400">PROGRESS</th>
+                                </tr>
+                            </thead>
+                            <tbody className="bg-black/50">
+                                {users.map((u, i) => (
+                                    <tr key={i} className="hover:bg-slate-800/50 transition-colors border-b border-slate-800/30">
+                                        <td className="p-3 text-emerald-500 truncate max-w-[200px]">{u.email}</td>
+                                        <td className="p-3 text-slate-300">{u.name}</td>
+                                        <td className="p-3 text-yellow-500">{u.role}</td>
+                                        <td className="p-3 text-slate-500">{u.password}</td>
+                                        <td className="p-3 text-slate-600 truncate max-w-[200px]">{JSON.stringify(u.stats)}</td>
+                                        <td className="p-3 text-blue-400">{u.progress.completed}/{u.progress.total}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    )}
+                    
+                    {inspectorView === 'sessions' && (
+                        <table className="w-full text-left border-collapse font-mono text-xs">
+                            <thead className="bg-slate-950 sticky top-0 z-10 shadow-lg">
+                                <tr>
+                                    <th className="p-3 border-b border-slate-700 text-slate-400">ID</th>
+                                    <th className="p-3 border-b border-slate-700 text-slate-400">WEEK</th>
+                                    <th className="p-3 border-b border-slate-700 text-slate-400">#</th>
+                                    <th className="p-3 border-b border-slate-700 text-slate-400">TITLE</th>
+                                    <th className="p-3 border-b border-slate-700 text-slate-400">VIDEO_URL</th>
+                                    <th className="p-3 border-b border-slate-700 text-slate-400">TRANSCRIPT?</th>
+                                </tr>
+                            </thead>
+                            <tbody className="bg-black/50">
+                                {flatSessions.map((s, i) => (
+                                    <tr key={i} className="hover:bg-slate-800/50 transition-colors border-b border-slate-800/30">
+                                        <td className="p-3 text-slate-500">{s.id}</td>
+                                        <td className="p-3 text-slate-400">{s.weekId}</td>
+                                        <td className="p-3 text-slate-400">{s.sessionNumber}</td>
+                                        <td className="p-3 text-white truncate max-w-[200px]" title={s.title}>{s.title}</td>
+                                        <td className="p-3 truncate max-w-[200px]">
+                                            {s.videoUrl ? (
+                                                <a href={s.videoUrl} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline flex items-center gap-1">
+                                                    <LinkIcon size={10} /> Link
+                                                </a>
+                                            ) : <span className="text-slate-700">NULL</span>}
+                                        </td>
+                                        <td className="p-3">
+                                            {s.transcript ? <Check size={12} className="text-green-500"/> : <Minus size={12} className="text-slate-700"/>}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    )}
+                </div>
+                <div className="bg-slate-950 p-2 text-[10px] text-slate-500 font-mono text-right">
+                    {inspectorView === 'users' ? `TOTAL_RECORDS: ${users.length}` : `TOTAL_RECORDS: ${flatSessions.length}`} | READ_ONLY_VIEW
+                </div>
             </div>
         )}
 
@@ -472,7 +578,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ users, content, onRefresh }) =>
 
         {/* --- TAB: BACKUP --- */}
         {activeTab === 'backup' && (
-            <div className="bg-surface border border-slate-700 rounded-2xl p-8 shadow-xl max-w-3xl mx-auto">
+            <div className="bg-surface border border-slate-700 rounded-2xl p-8 shadow-xl max-w-3xl mx-auto animate-in fade-in slide-in-from-bottom-4">
                  <div className="flex items-start gap-4 mb-8">
                      <div className="p-4 bg-yellow-500/10 rounded-2xl border border-yellow-500/30 text-yellow-500">
                          <AlertTriangle size={32} />
