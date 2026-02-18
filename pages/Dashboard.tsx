@@ -1,6 +1,6 @@
 import React from 'react';
 import { User } from '../types';
-import { BookOpen, Clock, Cpu, Terminal, Sparkles, ArrowRight, Zap, Database } from 'lucide-react';
+import { BookOpen, Clock, Terminal, Sparkles, ArrowRight, Zap, Database, ShieldAlert, Users } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 interface DashboardProps {
@@ -9,6 +9,7 @@ interface DashboardProps {
 
 const Dashboard: React.FC<DashboardProps> = ({ user }) => {
   const percentage = Math.round((user.progress.completed / user.progress.total) * 100);
+  const isMaster = user.role.toLowerCase().includes('master') || user.email.includes('armin');
 
   return (
     <div className="animate-in fade-in duration-700 relative">
@@ -91,6 +92,24 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
                     </button>
                 </Link>
             </div>
+
+            {/* Admin Shortcut Card */}
+            {isMaster && (
+                <div className="bg-red-900/10 p-6 rounded-3xl border border-red-500/30 flex flex-col justify-between relative overflow-hidden group">
+                    <div className="absolute top-0 right-0 p-4 opacity-50">
+                        <ShieldAlert className="text-red-500" size={32} />
+                    </div>
+                    <div>
+                        <h3 className="text-xl font-black text-white mb-2">ADMIN_ZONE</h3>
+                        <p className="text-slate-400 text-xs mb-4">Gestión de usuarios y base de datos.</p>
+                    </div>
+                    <Link to="/admin" className="w-full">
+                        <button className="w-full py-3 bg-red-600/20 hover:bg-red-600 text-red-200 hover:text-white border border-red-500/50 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all">
+                           <Users size={16} /> ABRIR PANEL
+                        </button>
+                    </Link>
+                </div>
+            )}
         </div>
       </div>
     </div>
