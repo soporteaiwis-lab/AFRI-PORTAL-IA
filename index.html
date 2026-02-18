@@ -10,15 +10,32 @@
     <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@300;400;600&family=Plus+Jakarta+Sans:wght@300;400;600;800&display=swap" rel="stylesheet">
     
     <script>
-        // SISTEMA DE ARRANQUE SEGURO
-        // Si React no toma el control en 2.5 segundos, eliminamos el loader manualmente
-        setTimeout(() => {
-            const loader = document.getElementById('app-loader');
-            if (loader) {
-                loader.style.opacity = '0';
-                setTimeout(() => loader.style.display = 'none', 500);
-            }
-        }, 2500);
+        // =================================================================
+        // 🛡️ SISTEMA DE ARRANQUE GARANTIZADO (FAILSAFE)
+        // =================================================================
+        // Si React falla, este script toma el control a los 3 segundos
+        // y elimina el bloqueo visual para permitir diagnóstico o entrada.
+        window.onload = function() {
+            setTimeout(() => {
+                const loader = document.getElementById('app-loader');
+                if (loader && loader.style.display !== 'none') {
+                    console.warn("⚠️ Tiempo de carga excedido. Forzando apertura de UI.");
+                    loader.innerHTML = '<div style="color:red; font-family:sans-serif; text-align:center;">⚠ Retraso detectado.<br>Entrando en modo seguro...</div>';
+                    setTimeout(() => {
+                        loader.style.opacity = '0';
+                        setTimeout(() => loader.style.display = 'none', 500);
+                    }, 1000);
+                }
+            }, 3500);
+        };
+
+        // Protocolo de Limpieza Local (Solicitado)
+        (function() {
+            try {
+                localStorage.clear();
+                sessionStorage.clear();
+            } catch(e) {}
+        })();
     </script>
 
     <script>
@@ -36,11 +53,9 @@
                         dark: '#030712',
                         darker: '#000000',
                         surface: '#0f172a',
-                        terminal: '#000000'
                     },
                     animation: {
                         'pulse-glow': 'pulseGlow 2s ease-in-out infinite',
-                        'scanline': 'scanline 8s linear infinite',
                         'spin-slow': 'spin 8s linear infinite',
                     },
                     keyframes: {
@@ -48,9 +63,9 @@
                             '0%, 100%': { opacity: '0.4', filter: 'drop-shadow(0 0 5px #4ade80)' },
                             '50%': { opacity: '0.8', filter: 'drop-shadow(0 0 15px #4ade80)' },
                         },
-                        scanline: {
-                            '0%': { transform: 'translateY(-100%)' },
-                            '100%': { transform: 'translateY(100%)' }
+                        spin: {
+                            '0%': { transform: 'rotate(0deg)' },
+                            '100%': { transform: 'rotate(360deg)' }
                         }
                     },
                     padding: {
@@ -67,7 +82,9 @@
         ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 10px; }
         .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
     </style>
-<script type="importmap">
+    
+    <!-- IMPORTMAP LIMPIO Y ESTRICTO (V18) -->
+    <script type="importmap">
 {
   "imports": {
     "react": "https://esm.sh/react@18.2.0",
@@ -76,19 +93,29 @@
     "react-router-dom": "https://esm.sh/react-router-dom@6.21.1",
     "@google/genai": "https://esm.sh/@google/genai@0.1.1",
     "lucide-react": "https://esm.sh/lucide-react@0.300.0",
+    "firebase/app": "https://esm.sh/firebase@10.7.1/app",
+    "firebase/firestore": "https://esm.sh/firebase@10.7.1/firestore",
     "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
-    "react/": "https://esm.sh/react@^19.2.4/"
+    "react/": "https://esm.sh/react@^19.2.4/",
+    "firebase/": "https://esm.sh/firebase@^12.9.0/"
   }
 }
 </script>
 </head>
 <body class="bg-darker text-slate-200 antialiased font-sans h-full">
     
-    <!-- Loader Minimalista -->
+    <!-- Loader Cloud Optimizado -->
     <div id="app-loader" style="position: fixed; inset: 0; background: #000; z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; transition: opacity 0.5s ease;">
-        <div style="width: 40px; height: 40px; border: 3px solid #333; border-top-color: #4ade80; border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 20px;"></div>
-        <div style="color: #4ade80; font-family: monospace; font-size: 12px; letter-spacing: 2px;">INICIANDO SISTEMA...</div>
-        <style>@keyframes spin { 100% { transform: rotate(360deg); } }</style>
+        <div style="position: relative; width: 60px; height: 60px;">
+            <div style="position: absolute; inset: 0; border: 4px solid #1e293b; border-radius: 50%;"></div>
+            <div style="position: absolute; inset: 0; border: 4px solid transparent; border-top-color: #4ade80; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+        </div>
+        <div style="margin-top: 20px; color: #4ade80; font-family: monospace; font-size: 14px; letter-spacing: 2px;">INICIANDO SISTEMA...</div>
+        
+        <!-- Botón de emergencia manual (por si acaso) -->
+        <button onclick="document.getElementById('app-loader').style.display='none'" style="margin-top: 40px; color: #333; background: transparent; border: 1px solid #333; padding: 5px 10px; border-radius: 4px; font-size: 10px; cursor: pointer;">
+            FORZAR ENTRADA
+        </button>
     </div>
 
     <div id="root" class="h-full"></div>

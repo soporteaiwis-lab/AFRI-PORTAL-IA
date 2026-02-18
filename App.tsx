@@ -15,42 +15,50 @@ const App: React.FC = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [content, setContent] = useState<WeekData[]>([]);
 
-  // BOOTSTRAP RAPIDO
+  // BOOTSTRAP DEL SISTEMA
   useEffect(() => {
     const init = async () => {
-        await seedDatabaseIfEmpty();
-        const [u, c] = await Promise.all([getUsers(), getContent()]);
-        setUsers(u);
-        setContent(c);
-
-        // Restaurar sesión
-        const savedEmail = localStorage.getItem('simpledata_user_email');
-        if (savedEmail) {
-            const found = u.find(x => x.email === savedEmail);
-            if (found) setUser(found);
+        try {
+            await seedDatabaseIfEmpty();
+            const [u, c] = await Promise.all([getUsers(), getContent()]);
+            setUsers(u);
+            setContent(c);
+            console.log("✅ Sistema Iniciado Correctamente");
+        } catch (e) {
+            console.error("❌ Error en arranque:", e);
+        } finally {
+            // ELIMINAR PANTALLA DE CARGA (CRÍTICO)
+            // Este bloque se ejecuta SIEMPRE, haya error o no.
+            const loader = document.getElementById('app-loader');
+            if (loader) {
+                loader.style.opacity = '0';
+                setTimeout(() => {
+                    loader.style.display = 'none';
+                    // Doble seguridad: eliminar del DOM
+                    loader.remove();
+                }, 500);
+            }
         }
-
-        // ELIMINAR LOADER HTML (CRÍTICO)
-        const loader = document.getElementById('app-loader');
-        if (loader) loader.style.display = 'none';
     };
-    init();
+    
+    // Pequeño delay artificial para asegurar que el DOM esté listo
+    setTimeout(init, 100);
   }, []);
 
   const handleLogin = (u: User) => {
       setUser(u);
-      localStorage.setItem('simpledata_user_email', u.email);
   };
 
   const handleLogout = () => {
       setUser(null);
-      localStorage.removeItem('simpledata_user_email');
   };
 
   const updateProgress = async (count: number, details: Record<string, boolean>) => {
       if (!user) return;
       const newUser = { ...user, progress: { ...user.progress, completed: count }, progress_details: details };
       setUser(newUser);
+      // Actualización optimista
+      setUsers(prev => prev.map(u => u.email === newUser.email ? newUser : u));
       await saveUserProgress(newUser, details);
   };
 
@@ -66,7 +74,7 @@ const App: React.FC = () => {
           <Route path="/classes" element={user ? <Classes user={user} videos={videoMap} onUpdateProgress={updateProgress} /> : <Navigate to="/login" />} />
           <Route path="/students" element={user ? <Students users={users} /> : <Navigate to="/login" />} />
           <Route path="/guide" element={user ? <Guide /> : <Navigate to="/login" />} />
-          <Route path="/admin" element={user && isMaster ? <AdminPanel users={users} content={content} onRefresh={() => window.location.reload()} /> : <Navigate to="/" />} />
+          <Route path="/admin" element={user && isMaster ? <AdminPanel users={users} content={content} onRefresh={() => { /* RAM refresh is instant */ }} /> : <Navigate to="/" />} />
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>
       </Layout>

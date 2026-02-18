@@ -1,98 +1,98 @@
 import { User, WeekData, ClassSession } from '../types';
 import { COURSE_CONTENT } from '../constants';
+import { db } from '../firebaseConfig';
+// Importamos funciones de firestore dinámicamente o usamos any para evitar crash en build estático sin los módulos
+import * as Firestore from 'firebase/firestore'; 
 
-// --- CLAVES DE ALMACENAMIENTO NATIVO ---
-const DB_USERS_KEY = 'afri_db_users_native';
-const DB_CONTENT_KEY = 'afri_db_content_native';
+// ============================================================================
+// 🧠 MEMORIA RAM (Volátil - Garantiza acceso inmediato)
+// ============================================================================
 
-// --- USUARIO MASTER (INMUTABLE) ---
-const ROOT_ADMIN: User = {
-    id: 'root-master',
-    email: 'soporte.aiwis@gmail.com',
-    name: 'Soporte AIWIS',
-    role: 'Master Root',
-    avatar: 'S',
-    password: '1234',
-    stats: { prompting: 100, tools: 100, analysis: 100 },
-    progress: { completed: 0, total: 12 },
-    progress_details: {}
-};
+let MEMORY_USERS: User[] = [
+    {
+        id: 'root-master',
+        email: 'soporte.aiwis@gmail.com',
+        name: 'Soporte AIWIS',
+        role: 'Master Root',
+        avatar: 'S',
+        password: '1234',
+        stats: { prompting: 100, tools: 100, analysis: 100 },
+        progress: { completed: 0, total: 12 },
+        progress_details: {}
+    }
+];
 
-// --- ENGINE NATIVO ---
-const getStorage = <T>(key: string): T | null => {
-    try {
-        const item = localStorage.getItem(key);
-        return item ? JSON.parse(item) : null;
-    } catch { return null; }
-};
+let MEMORY_CONTENT: WeekData[] = JSON.parse(JSON.stringify(COURSE_CONTENT));
 
-const setStorage = (key: string, data: any) => {
-    localStorage.setItem(key, JSON.stringify(data));
-};
+// Helper seguro para saber si usar nube
+const canUseCloud = () => !!db;
 
-// --- API ---
+// ============================================================================
+// ☁️ SERVICIOS
+// ============================================================================
 
 export const seedDatabaseIfEmpty = async () => {
-    // Inicializar Usuarios si está vacío
-    let users = getStorage<User[]>(DB_USERS_KEY);
-    if (!users || !Array.isArray(users) || users.length === 0) {
-        setStorage(DB_USERS_KEY, [ROOT_ADMIN]);
-    } else {
-        // Asegurar que ROOT exista siempre
-        if (!users.some(u => u.email === ROOT_ADMIN.email)) {
-            users.push(ROOT_ADMIN);
-            setStorage(DB_USERS_KEY, users);
-        }
-    }
-
-    // Inicializar Contenido si está vacío
-    let content = getStorage<WeekData[]>(DB_CONTENT_KEY);
-    if (!content || !Array.isArray(content) || content.length === 0) {
-        setStorage(DB_CONTENT_KEY, COURSE_CONTENT);
-    }
+    console.log(`[DATA] Iniciando servicio. Modo Nube: ${canUseCloud() ? 'ON' : 'OFF'}`);
     return true;
 };
 
 export const getUsers = async (): Promise<User[]> => {
-    const users = getStorage<User[]>(DB_USERS_KEY);
-    return users || [ROOT_ADMIN];
+    if (canUseCloud()) {
+        try {
+            // @ts-ignore
+            const querySnapshot = await Firestore.getDocs(Firestore.collection(db, "users"));
+            const users: User[] = [];
+            querySnapshot.forEach((doc: any) => users.push(doc.data() as User));
+            if (users.length > 0) return users;
+        } catch (e) {
+            console.error("Error leyendo nube, usando RAM:", e);
+        }
+    }
+    return MEMORY_USERS;
 };
 
 export const getContent = async (): Promise<WeekData[]> => {
-    const content = getStorage<WeekData[]>(DB_CONTENT_KEY);
-    return content || COURSE_CONTENT;
+    // Por simplicidad y velocidad, el contenido estructura se mantiene en código/RAM
+    // En una versión futura completa, esto leería de Firestore
+    return MEMORY_CONTENT;
 };
 
 export const createUser = async (user: User) => {
-    const users = await getUsers();
-    // Evitar duplicados por email
-    const index = users.findIndex(u => u.email === user.email);
-    if (index >= 0) {
-        users[index] = user; // Actualizar si existe
-    } else {
-        users.push(user);
+    // Actualizar RAM primero (UI Instantánea)
+    const idx = MEMORY_USERS.findIndex(u => u.email === user.email);
+    if (idx >= 0) MEMORY_USERS[idx] = user;
+    else MEMORY_USERS.push(user);
+
+    // Intentar Nube en segundo plano
+    if (canUseCloud()) {
+        try {
+            // @ts-ignore
+            await Firestore.setDoc(Firestore.doc(db, "users", user.email), user);
+        } catch (e) { console.error("Cloud Write Error:", e); }
     }
-    setStorage(DB_USERS_KEY, users);
-    return user;
 };
 
 export const updateUser = async (user: User) => createUser(user);
 
 export const deleteUser = async (email: string) => {
-    if (email === ROOT_ADMIN.email) throw new Error("No puedes eliminar al Root Master.");
-    const users = await getUsers();
-    const newUsers = users.filter(u => u.email !== email);
-    setStorage(DB_USERS_KEY, newUsers);
+    if (email === 'soporte.aiwis@gmail.com') throw new Error("Acceso Denegado: Root es intocable.");
+    
+    MEMORY_USERS = MEMORY_USERS.filter(u => u.email !== email);
+
+    if (canUseCloud()) {
+        try {
+            // @ts-ignore
+            await Firestore.deleteDoc(Firestore.doc(db, "users", email));
+        } catch (e) { console.error("Cloud Delete Error:", e); }
+    }
 };
 
 export const updateSession = async (session: ClassSession) => {
-    const content = await getContent();
-    const week = content.find(w => w.id === session.weekId);
+    const week = MEMORY_CONTENT.find(w => w.id === session.weekId);
     if (week) {
-        const index = week.sessions.findIndex(s => s.id === session.id);
-        if (index >= 0) {
-            week.sessions[index] = session;
-            setStorage(DB_CONTENT_KEY, content);
+        const idx = week.sessions.findIndex(s => s.id === session.id);
+        if (idx >= 0) {
+            week.sessions[idx] = session;
             return true;
         }
     }
