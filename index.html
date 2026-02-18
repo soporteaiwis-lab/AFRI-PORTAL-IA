@@ -10,28 +10,15 @@
     <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@300;400;600&family=Plus+Jakarta+Sans:wght@300;400;600;800&display=swap" rel="stylesheet">
     
     <script>
-        // FAILSAFE: Si React falla o tarda mucho, forzar la entrada a los 3 segundos.
+        // SISTEMA DE ARRANQUE SEGURO
+        // Si React no toma el control en 2.5 segundos, eliminamos el loader manualmente
         setTimeout(() => {
             const loader = document.getElementById('app-loader');
-            const forceBtn = document.getElementById('force-entry-btn');
-            if (loader && forceBtn) {
-                forceBtn.style.display = 'block';
-                console.warn("Tiempo de carga excedido. Habilitando entrada forzada.");
+            if (loader) {
+                loader.style.opacity = '0';
+                setTimeout(() => loader.style.display = 'none', 500);
             }
-        }, 2000);
-
-        window.forceEntry = function() {
-            const loader = document.getElementById('app-loader');
-            if(loader) loader.style.display = 'none';
-        }
-
-        // Error Handler
-        window.onerror = function(message, source, lineno, colno, error) {
-            console.error("Global Error:", message);
-            // Si hay error critico, matamos el loader para ver si la UI renderizó algo
-            const loader = document.getElementById('app-loader');
-            if (loader) loader.style.display = 'none';
-        };
+        }, 2500);
     </script>
 
     <script>
@@ -97,16 +84,10 @@
 </head>
 <body class="bg-darker text-slate-200 antialiased font-sans h-full">
     
-    <!-- Loader Seguro -->
-    <div id="app-loader" style="position: fixed; inset: 0; background: #000; z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #4ade80; font-family: monospace;">
-        <div style="width: 50px; height: 50px; border: 4px solid #1e293b; border-top-color: #4ade80; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 20px;"></div>
-        <div style="letter-spacing: 2px; font-weight: bold;">CARGANDO SISTEMA...</div>
-        
-        <!-- Botón de emergencia oculto por defecto -->
-        <button id="force-entry-btn" onclick="window.forceEntry()" style="display: none; margin-top: 30px; background: #ef4444; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-family: sans-serif; font-weight: bold;">
-            ⚠️ ¿Tarda mucho? Clic para entrar
-        </button>
-
+    <!-- Loader Minimalista -->
+    <div id="app-loader" style="position: fixed; inset: 0; background: #000; z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; transition: opacity 0.5s ease;">
+        <div style="width: 40px; height: 40px; border: 3px solid #333; border-top-color: #4ade80; border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 20px;"></div>
+        <div style="color: #4ade80; font-family: monospace; font-size: 12px; letter-spacing: 2px;">INICIANDO SISTEMA...</div>
         <style>@keyframes spin { 100% { transform: rotate(360deg); } }</style>
     </div>
 
