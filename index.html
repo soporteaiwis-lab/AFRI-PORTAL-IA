@@ -8,6 +8,23 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@300;400;600&family=Plus+Jakarta+Sans:wght@300;400;600;800&display=swap" rel="stylesheet">
+    
+    <script>
+        // GLOBAL ERROR HANDLER: Para evitar la "Pantalla Negra" silenciosa
+        window.onerror = function(message, source, lineno, colno, error) {
+            const errorContainer = document.getElementById('critical-error');
+            const errorText = document.getElementById('error-text');
+            if (errorContainer && errorText) {
+                errorContainer.style.display = 'flex';
+                errorText.innerText = `Error: ${message}\nSource: ${source}:${lineno}`;
+                // Ocultar loader si existe
+                const loader = document.getElementById('app-loader');
+                if (loader) loader.style.display = 'none';
+            }
+            console.error("Critical Error caught:", error);
+        };
+    </script>
+
     <script>
         tailwind.config = {
             theme: {
@@ -28,7 +45,6 @@
                     animation: {
                         'pulse-glow': 'pulseGlow 2s ease-in-out infinite',
                         'scanline': 'scanline 8s linear infinite',
-                        'float': 'float 4s ease-in-out infinite',
                         'spin-slow': 'spin 8s linear infinite',
                     },
                     keyframes: {
@@ -39,10 +55,6 @@
                         scanline: {
                             '0%': { transform: 'translateY(-100%)' },
                             '100%': { transform: 'translateY(100%)' }
-                        },
-                        float: {
-                            '0%, 100%': { transform: 'translateY(0)' },
-                            '50%': { transform: 'translateY(-10px)' }
                         }
                     },
                     padding: {
@@ -54,61 +66,46 @@
     </script>
     <style>
         body { background-color: #000; overflow-x: hidden; }
-        .mainframe-border {
-            border: 1px solid rgba(74, 222, 128, 0.2);
-            box-shadow: 0 0 10px rgba(74, 222, 128, 0.05);
-        }
-        
-        .ai-glass {
-            background: rgba(15, 23, 42, 0.7);
-            backdrop-filter: blur(16px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-        }
-
-        .terminal-text {
-            color: #4ade80;
-            text-shadow: 0 0 5px rgba(74, 222, 128, 0.5);
-        }
-        
-        .ai-gradient-text {
-            background: linear-gradient(to right, #3b82f6, #8b5cf6, #4ade80);
-            -webkit-background-clip: text;
-            background-clip: text;
-            color: transparent;
-        }
-
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: #030712; }
         ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 10px; }
-        ::-webkit-scrollbar-thumb:hover { background: #4ade80; }
-
-        .scanline-effect {
-            position: absolute;
-            top: 0; left: 0; width: 100%; height: 2px;
-            background: rgba(74, 222, 128, 0.1);
-            animation: scanline 4s linear infinite;
-            pointer-events: none;
-            z-index: 50;
-        }
-        
-        /* Mobile Optimizations */
         .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
     </style>
 <script type="importmap">
 {
   "imports": {
-    "react/": "https://esm.sh/react@^18.2.0/",
-    "react": "https://esm.sh/react@^18.2.0",
-    "react-dom/": "https://esm.sh/react-dom@^18.2.0/",
-    "react-dom": "https://esm.sh/react-dom@^18.2.0",
-    "@google/genai": "https://esm.sh/@google/genai@^0.1.1",
-    "lucide-react": "https://esm.sh/lucide-react@^0.300.0",
-    "react-router-dom": "https://esm.sh/react-router-dom@^6.21.1"
+    "react": "https://esm.sh/react@18.2.0",
+    "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+    "react-dom": "https://esm.sh/react-dom@18.2.0",
+    "react-router-dom": "https://esm.sh/react-router-dom@6.21.1",
+    "@google/genai": "https://esm.sh/@google/genai@0.1.1",
+    "lucide-react": "https://esm.sh/lucide-react@0.300.0",
+    "firebase/app": "https://esm.sh/firebase@10.7.1/app",
+    "firebase/firestore": "https://esm.sh/firebase@10.7.1/firestore",
+    "react/": "https://esm.sh/react@^19.2.4/",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.4/"
   }
 }
 </script>
 </head>
 <body class="bg-darker text-slate-200 antialiased font-sans h-full">
+    <!-- Loader Inicial (Desaparece cuando React monta) -->
+    <div id="app-loader" style="position: fixed; inset: 0; background: #000; z-index: 50; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #4ade80; font-family: monospace;">
+        <div style="width: 40px; height: 40px; border: 4px solid #333; border-top-color: #4ade80; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 20px;"></div>
+        <div style="letter-spacing: 2px;">INICIALIZANDO SISTEMA...</div>
+        <style>@keyframes spin { 100% { transform: rotate(360deg); } }</style>
+    </div>
+
+    <!-- Contenedor de Error Crítico (Visible solo si falla JS) -->
+    <div id="critical-error" style="display: none; position: fixed; inset: 0; background: #0f0505; z-index: 100; flex-direction: column; align-items: center; justify-content: center; padding: 20px; text-align: center;">
+        <h1 style="color: #ef4444; font-size: 24px; margin-bottom: 10px; font-weight: bold;">⚠️ ERROR DE SISTEMA</h1>
+        <p style="color: #cbd5e1; margin-bottom: 20px;">La aplicación no pudo iniciar. Por favor envía esta captura a soporte.</p>
+        <pre id="error-text" style="background: #1e1e1e; padding: 15px; border-radius: 8px; color: #fca5a5; overflow: auto; max-width: 100%; font-size: 12px; margin-bottom: 20px; text-align: left;"></pre>
+        <button onclick="localStorage.clear(); window.location.reload();" style="background: #ef4444; color: white; padding: 10px 20px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer;">
+            RESET DE FÁBRICA (Borrar Datos Locales)
+        </button>
+    </div>
+
     <div id="root" class="h-full"></div>
 </body>
 </html>
