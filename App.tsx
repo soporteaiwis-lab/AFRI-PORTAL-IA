@@ -14,33 +14,27 @@ const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [content, setContent] = useState<WeekData[]>([]);
-  const [isReady, setIsReady] = useState(false);
 
-  // --- BOOTSTRAP ---
+  // BOOTSTRAP RAPIDO
   useEffect(() => {
-    const boot = async () => {
-        try {
-            await seedDatabaseIfEmpty();
-            const [u, c] = await Promise.all([getUsers(), getContent()]);
-            setUsers(u);
-            setContent(c);
-            
-            // Restore Session
-            const savedEmail = localStorage.getItem('simpledata_user_email');
-            if (savedEmail) {
-                const found = u.find(x => x.email === savedEmail);
-                if (found) setUser(found);
-            }
-        } catch (e) {
-            console.error("Boot error:", e);
-        } finally {
-            setIsReady(true);
-            // Eliminar loader HTML nativo
-            const loader = document.getElementById('app-loader');
-            if (loader) loader.style.display = 'none';
+    const init = async () => {
+        await seedDatabaseIfEmpty();
+        const [u, c] = await Promise.all([getUsers(), getContent()]);
+        setUsers(u);
+        setContent(c);
+
+        // Restaurar sesión
+        const savedEmail = localStorage.getItem('simpledata_user_email');
+        if (savedEmail) {
+            const found = u.find(x => x.email === savedEmail);
+            if (found) setUser(found);
         }
+
+        // ELIMINAR LOADER HTML (CRÍTICO)
+        const loader = document.getElementById('app-loader');
+        if (loader) loader.style.display = 'none';
     };
-    boot();
+    init();
   }, []);
 
   const handleLogin = (u: User) => {
@@ -57,11 +51,8 @@ const App: React.FC = () => {
       if (!user) return;
       const newUser = { ...user, progress: { ...user.progress, completed: count }, progress_details: details };
       setUser(newUser);
-      setUsers(prev => prev.map(u => u.email === newUser.email ? newUser : u));
       await saveUserProgress(newUser, details);
   };
-
-  if (!isReady) return null; // El loader HTML sigue visible
 
   const isMaster = user?.role === 'Master Root' || user?.email === 'soporte.aiwis@gmail.com';
   const videoMap = {}; 

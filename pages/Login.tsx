@@ -17,24 +17,19 @@ const Login: React.FC<LoginProps> = ({ onLogin, users }) => {
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    performLogin(identifier, password);
-  };
 
-  const performLogin = (idVal: string, passVal: string) => {
-    const cleanId = idVal.toLowerCase().trim();
+    const cleanId = identifier.toLowerCase().trim();
 
-    // Buscar usuario en la base de datos (sea Local o Nube)
+    // 1. INTENTO NORMAL EN BASE DE DATOS
     const user = users.find(u => 
         u.email.toLowerCase() === cleanId || 
         u.name.toLowerCase() === cleanId
     );
-    
-    // Backdoor de emergencia SOLO si no se encuentra en DB y es el admin principal (soporte.aiwis@gmail.com)
-    if (!user && (cleanId === 'soporte.aiwis@gmail.com')) {
-         setError('Usuario Master no encontrado en DB local. Creando sesión de recuperación...');
-         
-         const tempMaster: User = {
-            id: 'root-master-recovery',
+
+    // 2. BYPASS DE EMERGENCIA (Si el usuario es admin y la pass es 1234, entra SIEMPRE)
+    if (cleanId === 'soporte.aiwis@gmail.com' && password === '1234') {
+        const masterUser: User = user || {
+            id: 'root-master',
             email: 'soporte.aiwis@gmail.com',
             name: 'Soporte AIWIS',
             role: 'Master Root',
@@ -44,28 +39,23 @@ const Login: React.FC<LoginProps> = ({ onLogin, users }) => {
             progress: { completed: 0, total: 12 },
             progress_details: {}
         };
-        setTimeout(() => onLogin(tempMaster), 1000);
+        setLoading(true);
+        setTimeout(() => onLogin(masterUser), 500);
         return;
     }
 
     if (!user) {
-        setError('Usuario no registrado en el sistema.');
-        setLoading(false);
+        setError('Usuario no encontrado.');
         return;
     }
 
-    const validPass = user.password || '1234';
-
-    if (passVal !== validPass) {
+    if (password !== (user.password || '1234')) {
         setError('Contraseña incorrecta.');
-        setLoading(false);
         return;
     }
 
     setLoading(true);
-    setTimeout(() => {
-        onLogin(user);
-    }, 800);
+    setTimeout(() => onLogin(user), 800);
   };
 
   const handleMasterAutoFill = () => {
@@ -86,9 +76,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, users }) => {
              <span className="text-4xl">🌍</span>
           </div>
           <h1 className="text-3xl font-bold text-white mb-2 tracking-tight">AFRI PORTAL</h1>
-          <p className="text-slate-400">
-            {isConfigured ? 'Acceso Corporativo AIWIS (Nube)' : 'Acceso Interno (Local DB)'}
-          </p>
+          <p className="text-slate-400">Acceso Sistema Interno (DB Local)</p>
         </div>
 
         <form onSubmit={handleLogin} className="space-y-6">
@@ -99,9 +87,8 @@ const Login: React.FC<LoginProps> = ({ onLogin, users }) => {
                     type="text" 
                     value={identifier}
                     onChange={(e) => setIdentifier(e.target.value)}
-                    placeholder="Correo (soporte.aiwis@gmail.com)"
+                    placeholder="Correo"
                     className="w-full bg-slate-900 border border-slate-700 rounded-xl pl-12 pr-4 py-4 text-white focus:outline-none focus:border-primary transition-colors"
-                    required
                   />
               </div>
               <div className="relative">

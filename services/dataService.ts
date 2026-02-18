@@ -2,10 +2,10 @@ import { User, WeekData, ClassSession } from '../types';
 import { COURSE_CONTENT } from '../constants';
 
 // --- CLAVES DE BASE DE DATOS LOCAL ---
-const DB_USERS_KEY = 'afri_sys_users_v3';
-const DB_CONTENT_KEY = 'afri_sys_content_v3';
+const DB_USERS_KEY = 'afri_sys_users_v4';
+const DB_CONTENT_KEY = 'afri_sys_content_v4';
 
-// --- USUARIO MASTER ---
+// --- USUARIO MASTER (Siempre existe) ---
 const ROOT_ADMIN: User = {
     id: 'root-master',
     email: 'soporte.aiwis@gmail.com',
@@ -24,7 +24,6 @@ const getDB = <T>(key: string): T | null => {
         const data = localStorage.getItem(key);
         return data ? JSON.parse(data) : null;
     } catch (e) {
-        console.error(`Error leyendo DB [${key}]:`, e);
         return null;
     }
 };
@@ -33,37 +32,29 @@ const setDB = (key: string, data: any) => {
     try {
         localStorage.setItem(key, JSON.stringify(data));
     } catch (e) {
-        console.error(`Error escribiendo DB [${key}]:`, e);
+        console.error(e);
     }
 };
 
 // --- INICIALIZACIÓN ---
 export const seedDatabaseIfEmpty = async () => {
-    console.log("⚡ [DATA] Verificando integridad de datos locales...");
-    
     // 1. Usuarios
     let users = getDB<User[]>(DB_USERS_KEY);
-    if (!users || !Array.isArray(users) || users.length === 0) {
-        console.log("⚡ [DATA] Sembrando Usuario Master por defecto.");
+    if (!users || !Array.isArray(users)) {
         users = [ROOT_ADMIN];
         setDB(DB_USERS_KEY, users);
     } else {
-        // Asegurar que el Master exista y tenga la clave correcta
-        const adminIndex = users.findIndex(u => u.email === ROOT_ADMIN.email);
-        if (adminIndex === -1) {
+        // Asegurar admin
+        const hasAdmin = users.some(u => u.email === ROOT_ADMIN.email);
+        if (!hasAdmin) {
             users.push(ROOT_ADMIN);
-            setDB(DB_USERS_KEY, users);
-        } else {
-            // Actualizar credenciales del master por si cambiaron
-            users[adminIndex] = { ...users[adminIndex], ...ROOT_ADMIN };
             setDB(DB_USERS_KEY, users);
         }
     }
 
     // 2. Contenido
     let content = getDB<WeekData[]>(DB_CONTENT_KEY);
-    if (!content || !Array.isArray(content) || content.length === 0) {
-        console.log("⚡ [DATA] Sembrando Contenido del Curso.");
+    if (!content || !Array.isArray(content)) {
         setDB(DB_CONTENT_KEY, COURSE_CONTENT);
     }
     
@@ -85,21 +76,17 @@ export const getContent = async (): Promise<WeekData[]> => {
 export const createUser = async (user: User) => {
     const users = await getUsers();
     const idx = users.findIndex(u => u.email === user.email);
-    if (idx >= 0) {
-        users[idx] = user;
-    } else {
-        users.push(user);
-    }
+    if (idx >= 0) users[idx] = user;
+    else users.push(user);
     setDB(DB_USERS_KEY, users);
 };
 
 export const updateUser = async (user: User) => createUser(user);
 
 export const deleteUser = async (email: string) => {
-    if (email === ROOT_ADMIN.email) throw new Error("Acción denegada: No se puede eliminar al Super Admin.");
+    if (email === ROOT_ADMIN.email) return;
     const users = await getUsers();
-    const filtered = users.filter(u => u.email !== email);
-    setDB(DB_USERS_KEY, filtered);
+    setDB(DB_USERS_KEY, users.filter(u => u.email !== email));
 };
 
 export const updateSession = async (session: ClassSession) => {
@@ -117,7 +104,7 @@ export const updateSession = async (session: ClassSession) => {
 };
 
 export const saveUserProgress = async (user: User, progressJson: Record<string, boolean>) => {
-    const updatedUser: User = {
+    const updatedUser = {
         ...user,
         progress: {
             completed: Object.values(progressJson).filter(Boolean).length,

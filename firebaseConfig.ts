@@ -1,16 +1,14 @@
 // ============================================================================
-// 🟢 MODO SEGURO - SIN DEPENDENCIAS EXTERNAS
+// 🟢 CONFIGURACIÓN LOCAL (MODO SEGURO)
 // ============================================================================
-// Este archivo garantiza que no haya errores de importación de Firebase
-// que puedan causar la "Pantalla Negra".
+// Se ha desactivado la nube temporalmente para garantizar acceso inmediato.
 
 const db = null;
 const isConfigured = false; 
-const connectionError = "Modo Local Nativo Activado";
+const connectionError = "";
 
 const saveCloudConfig = (config: any) => {
-    console.log("Configuración guardada localmente:", config);
-    // En el futuro, aquí podríamos guardar en LocalStorage si volvemos a activar Firebase
+    console.log("Config saved locally", config);
 };
 
 export { db, isConfigured, connectionError, saveCloudConfig };

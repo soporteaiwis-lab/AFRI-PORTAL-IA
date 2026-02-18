@@ -10,18 +10,27 @@
     <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@300;400;600&family=Plus+Jakarta+Sans:wght@300;400;600;800&display=swap" rel="stylesheet">
     
     <script>
-        // GLOBAL ERROR HANDLER: Para evitar la "Pantalla Negra" silenciosa
-        window.onerror = function(message, source, lineno, colno, error) {
-            const errorContainer = document.getElementById('critical-error');
-            const errorText = document.getElementById('error-text');
-            if (errorContainer && errorText) {
-                errorContainer.style.display = 'flex';
-                errorText.innerText = `Error: ${message}\nSource: ${source}:${lineno}`;
-                // Ocultar loader si existe
-                const loader = document.getElementById('app-loader');
-                if (loader) loader.style.display = 'none';
+        // FAILSAFE: Si React falla o tarda mucho, forzar la entrada a los 3 segundos.
+        setTimeout(() => {
+            const loader = document.getElementById('app-loader');
+            const forceBtn = document.getElementById('force-entry-btn');
+            if (loader && forceBtn) {
+                forceBtn.style.display = 'block';
+                console.warn("Tiempo de carga excedido. Habilitando entrada forzada.");
             }
-            console.error("Critical Error caught:", error);
+        }, 2000);
+
+        window.forceEntry = function() {
+            const loader = document.getElementById('app-loader');
+            if(loader) loader.style.display = 'none';
+        }
+
+        // Error Handler
+        window.onerror = function(message, source, lineno, colno, error) {
+            console.error("Global Error:", message);
+            // Si hay error critico, matamos el loader para ver si la UI renderizó algo
+            const loader = document.getElementById('app-loader');
+            if (loader) loader.style.display = 'none';
         };
     </script>
 
@@ -80,30 +89,25 @@
     "react-router-dom": "https://esm.sh/react-router-dom@6.21.1",
     "@google/genai": "https://esm.sh/@google/genai@0.1.1",
     "lucide-react": "https://esm.sh/lucide-react@0.300.0",
-    "firebase/app": "https://esm.sh/firebase@10.7.1/app",
-    "firebase/firestore": "https://esm.sh/firebase@10.7.1/firestore",
-    "react/": "https://esm.sh/react@^19.2.4/",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.4/"
+    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
+    "react/": "https://esm.sh/react@^19.2.4/"
   }
 }
 </script>
 </head>
 <body class="bg-darker text-slate-200 antialiased font-sans h-full">
-    <!-- Loader Inicial (Desaparece cuando React monta) -->
-    <div id="app-loader" style="position: fixed; inset: 0; background: #000; z-index: 50; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #4ade80; font-family: monospace;">
-        <div style="width: 40px; height: 40px; border: 4px solid #333; border-top-color: #4ade80; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 20px;"></div>
-        <div style="letter-spacing: 2px;">INICIALIZANDO SISTEMA...</div>
-        <style>@keyframes spin { 100% { transform: rotate(360deg); } }</style>
-    </div>
-
-    <!-- Contenedor de Error Crítico (Visible solo si falla JS) -->
-    <div id="critical-error" style="display: none; position: fixed; inset: 0; background: #0f0505; z-index: 100; flex-direction: column; align-items: center; justify-content: center; padding: 20px; text-align: center;">
-        <h1 style="color: #ef4444; font-size: 24px; margin-bottom: 10px; font-weight: bold;">⚠️ ERROR DE SISTEMA</h1>
-        <p style="color: #cbd5e1; margin-bottom: 20px;">La aplicación no pudo iniciar. Por favor envía esta captura a soporte.</p>
-        <pre id="error-text" style="background: #1e1e1e; padding: 15px; border-radius: 8px; color: #fca5a5; overflow: auto; max-width: 100%; font-size: 12px; margin-bottom: 20px; text-align: left;"></pre>
-        <button onclick="localStorage.clear(); window.location.reload();" style="background: #ef4444; color: white; padding: 10px 20px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer;">
-            RESET DE FÁBRICA (Borrar Datos Locales)
+    
+    <!-- Loader Seguro -->
+    <div id="app-loader" style="position: fixed; inset: 0; background: #000; z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #4ade80; font-family: monospace;">
+        <div style="width: 50px; height: 50px; border: 4px solid #1e293b; border-top-color: #4ade80; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 20px;"></div>
+        <div style="letter-spacing: 2px; font-weight: bold;">CARGANDO SISTEMA...</div>
+        
+        <!-- Botón de emergencia oculto por defecto -->
+        <button id="force-entry-btn" onclick="window.forceEntry()" style="display: none; margin-top: 30px; background: #ef4444; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-family: sans-serif; font-weight: bold;">
+            ⚠️ ¿Tarda mucho? Clic para entrar
         </button>
+
+        <style>@keyframes spin { 100% { transform: rotate(360deg); } }</style>
     </div>
 
     <div id="root" class="h-full"></div>
