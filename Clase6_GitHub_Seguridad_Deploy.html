@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Clase 6 · GitHub, Seguridad y Deploy Básico</title>
+<style>
+  :root{
+    --navy:#0A1B3D;
+    --navy-2:#102A56;
+    --navy-3:#16356b;
+    --cyan:#1A7DC4;
+    --cyan-bright:#34B6F0;
+    --ink:#0A1B3D;
+    --paper:#EBF4FB;
+    --paper-2:#F4F9FE;
+    --white:#FFFFFF;
+    --mute:#9DB4D6;
+    --line:rgba(52,182,240,.22);
+    --term-bg:#08152e;
+    --green:#3DDC97;
+    --amber:#F5B544;
+    --red:#FF6B6B;
+    --mono:'SFMono-Regular',ui-monospace,'JetBrains Mono','Cascadia Code',Consolas,monospace;
+    --sans:'Segoe UI','Calibri',system-ui,-apple-system,'Helvetica Neue',Arial,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    font-family:var(--sans);
+    background:#05102a;
+    color:var(--white);
+    overflow:hidden;
+    -webkit-font-smoothing:antialiased;
+  }
+
+  /* ===== Deck shell ===== */
+  .deck{position:relative;width:100vw;height:100vh;overflow:hidden}
+  .slide{
+    position:absolute;inset:0;
+    display:flex;flex-direction:column;
+    padding:clamp(34px,5vw,80px) clamp(34px,6vw,110px);
+    opacity:0;visibility:hidden;
+    transform:translateY(14px);
+    transition:opacity .5s ease,transform .5s ease,visibility .5s;
+    background:
+      radial-gradient(1200px 700px at 82% -10%,rgba(52,182,240,.16),transparent 60%),
+      linear-gradient(160deg,var(--navy) 0%,#0a2150 55%,var(--navy) 100%);
+  }
+  .slide.active{opacity:1;visibility:visible;transform:translateY(0)}
+  .slide.light{
+    background:
+      radial-gradient(1100px 700px at 88% -20%,rgba(26,125,196,.14),transparent 55%),
+      linear-gradient(170deg,var(--paper-2),var(--paper));
+    color:var(--ink);
+  }
+
+  /* ===== Top brand bar ===== */
+  .brand{
+    display:flex;align-items:center;gap:12px;
+    position:absolute;top:clamp(26px,3.4vw,46px);left:clamp(34px,6vw,110px);
+    z-index:5;
+  }
+  .brand .mark{
+    font-weight:800;letter-spacing:.14em;font-size:15px;
+    color:var(--white);
+  }
+  .light .brand .mark{color:var(--navy-2)}
+  .brand .dot{width:9px;height:9px;border-radius:50%;background:var(--cyan-bright);box-shadow:0 0 14px var(--cyan-bright)}
+  .brand .tag{font-size:11px;letter-spacing:.22em;color:var(--mute);text-transform:uppercase}
+  .light .brand .tag{color:var(--cyan)}
+
+  /* ===== Eyebrow ===== */
+  .eyebrow{
+    display:inline-flex;align-items:center;gap:10px;
+    font-family:var(--mono);font-size:13px;letter-spacing:.08em;
+    color:var(--cyan-bright);margin-bottom:18px;
+  }
+  .light .eyebrow{color:var(--cyan)}
+  .eyebrow::before{content:"";width:26px;height:2px;background:var(--cyan-bright);border-radius:2px}
+  .light .eyebrow::before{background:var(--cyan)}
+
+  h1{font-size:clamp(34px,5.6vw,68px);line-height:1.04;font-weight:800;letter-spacing:-.02em}
+  h2{font-size:clamp(28px,4vw,48px);line-height:1.08;font-weight:800;letter-spacing:-.015em;margin-bottom:8px}
+  .accent{color:var(--cyan-bright)}
+  .light .accent{color:var(--cyan)}
+  .lead{font-size:clamp(16px,1.7vw,21px);color:var(--mute);max-width:60ch;line-height:1.5}
+  .light .lead{color:#3b5170}
+
+  .content{flex:1;display:flex;flex-direction:column;justify-content:center}
+
+  /* ===== Cover ===== */
+  .cover .content{gap:26px}
+  .cover .kicker{font-family:var(--mono);font-size:14px;letter-spacing:.18em;color:var(--mute);text-transform:uppercase}
+  .cover h1{max-width:18ch}
+  .cover .sub{display:flex;gap:14px;flex-wrap:wrap;margin-top:6px}
+  .chip{
+    font-family:var(--mono);font-size:13px;padding:8px 14px;border-radius:999px;
+    border:1px solid var(--line);color:var(--cyan-bright);background:rgba(52,182,240,.06);
+  }
+
+  /* ===== Agenda ===== */
+  .agenda{display:grid;grid-template-columns:repeat(3,1fr);gap:22px;margin-top:34px}
+  .acard{
+    border:1px solid var(--line);border-radius:18px;padding:26px 24px;
+    background:linear-gradient(180deg,rgba(52,182,240,.07),rgba(52,182,240,.01));
+    position:relative;overflow:hidden;
+  }
+  .acard .num{font-family:var(--mono);font-size:13px;color:var(--cyan-bright);letter-spacing:.1em}
+  .acard h3{font-size:21px;margin:14px 0 8px;font-weight:700}
+  .acard p{font-size:14.5px;color:var(--mute);line-height:1.5}
+  .acard .ic{font-size:26px;margin-bottom:4px;display:block}
+
+  /* ===== Two-col ===== */
+  .grid2{display:grid;grid-template-columns:1.05fr .95fr;gap:46px;align-items:center;margin-top:26px}
+  .stack{display:flex;flex-direction:column;gap:16px}
+  .point{display:flex;gap:14px;align-items:flex-start}
+  .point .b{flex:0 0 auto;width:26px;height:26px;border-radius:8px;display:grid;place-items:center;font-size:14px;font-weight:800;background:rgba(52,182,240,.16);color:var(--cyan-bright);margin-top:2px}
+  .light .point .b{background:rgba(26,125,196,.14);color:var(--cyan)}
+  .point .t{font-size:16.5px;line-height:1.45}
+  .point .t b{color:var(--white)}
+  .light .point .t b{color:var(--navy-2)}
+  .point .t span{color:var(--mute)}
+  .light .point .t span{color:#56708f}
+
+  /* ===== Terminal ===== */
+  .term{
+    background:var(--term-bg);border:1px solid rgba(52,182,240,.28);border-radius:14px;
+    box-shadow:0 24px 60px rgba(0,0,0,.45);overflow:hidden;font-family:var(--mono);
+  }
+  .term .bar{display:flex;align-items:center;gap:8px;padding:12px 16px;background:rgba(255,255,255,.04);border-bottom:1px solid rgba(255,255,255,.06)}
+  .term .bar i{width:11px;height:11px;border-radius:50%;display:block}
+  .term .bar .r{background:#ff5f57}.term .bar .y{background:#febc2e}.term .bar .g{background:#28c840}
+  .term .bar .path{margin-left:10px;font-size:12px;color:#7f9bc4}
+  .term .body{padding:20px 22px;font-size:14.5px;line-height:1.85}
+  .term .body .l{white-space:pre-wrap}
+  .cmt{color:#5e7aa6}
+  .prompt{color:var(--cyan-bright)}
+  .ok{color:var(--green)}
+  .bad{color:var(--red)}
+  .warn{color:var(--amber)}
+  .str{color:#9fe0b4}
+
+  /* ===== Danger / good cards ===== */
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:26px;margin-top:30px}
+  .panel{border-radius:18px;padding:26px;border:1px solid var(--line)}
+  .panel.bad{background:rgba(255,107,107,.07);border-color:rgba(255,107,107,.3)}
+  .panel.good{background:rgba(61,220,151,.07);border-color:rgba(61,220,151,.3)}
+  .panel h3{font-size:19px;margin-bottom:14px;display:flex;align-items:center;gap:10px}
+  .panel.bad h3{color:#ff8f8f}.panel.good h3{color:#6fe8b5}
+  .panel ul{list-style:none;display:flex;flex-direction:column;gap:11px}
+  .panel li{font-size:15px;color:#cdd9ee;line-height:1.45;padding-left:24px;position:relative}
+  .panel.bad li::before{content:"✕";position:absolute;left:0;color:var(--red);font-weight:800}
+  .panel.good li::before{content:"✓";position:absolute;left:0;color:var(--green);font-weight:800}
+
+  /* ===== Compare table ===== */
+  .compare{margin-top:26px;border:1px solid var(--line);border-radius:16px;overflow:hidden}
+  .compare .row{display:grid;grid-template-columns:1.1fr 1fr 1fr}
+  .compare .row>div{padding:16px 20px;font-size:15px;border-bottom:1px solid var(--line)}
+  .compare .row:last-child>div{border-bottom:none}
+  .compare .head>div{background:var(--navy-2);font-weight:700;font-size:14px;letter-spacing:.02em}
+  .compare .head .h-anti{color:var(--cyan-bright)}
+  .compare .head .h-ais{color:var(--amber)}
+  .compare .lab{color:var(--mute);font-family:var(--mono);font-size:13px}
+  .compare .row>div:not(.lab){color:#dbe6f7}
+  .compare .row:nth-child(even)>div{background:rgba(52,182,240,.04)}
+
+  /* ===== Steps ===== */
+  .steps{display:flex;flex-direction:column;gap:14px;margin-top:24px}
+  .step{display:flex;gap:18px;align-items:flex-start;border:1px solid var(--line);border-radius:14px;padding:18px 22px;background:rgba(52,182,240,.04)}
+  .step .n{flex:0 0 auto;width:38px;height:38px;border-radius:10px;display:grid;place-items:center;font-family:var(--mono);font-weight:800;background:var(--cyan);color:#03101f}
+  .step .x h4{font-size:17px;margin-bottom:4px}
+  .step .x p{font-size:14.5px;color:var(--mute);line-height:1.5}
+  .step .x code{font-family:var(--mono);background:rgba(52,182,240,.12);color:var(--cyan-bright);padding:2px 7px;border-radius:6px;font-size:13px}
+
+  /* ===== Closing ===== */
+  .close .content{align-items:flex-start;gap:22px}
+  .close .takeaways{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:18px;width:100%}
+  .tk{border:1px solid var(--line);border-radius:16px;padding:22px;background:rgba(52,182,240,.05)}
+  .tk .ic{font-size:24px}
+  .tk h4{font-size:16px;margin:12px 0 6px}
+  .tk p{font-size:13.5px;color:var(--mute);line-height:1.5}
+  .close .cta{margin-top:8px;font-family:var(--mono);font-size:15px;color:var(--cyan-bright)}
+
+  /* ===== Footer / nav ===== */
+  .footer{
+    position:absolute;bottom:clamp(22px,3vw,40px);left:clamp(34px,6vw,110px);right:clamp(34px,6vw,110px);
+    display:flex;align-items:center;justify-content:space-between;z-index:5;
+    font-family:var(--mono);font-size:12px;letter-spacing:.06em;color:var(--mute);
+  }
+  .light .footer{color:#5b7090}
+  .progress{position:absolute;top:0;left:0;height:3px;background:var(--cyan-bright);box-shadow:0 0 10px var(--cyan-bright);transition:width .45s ease;z-index:9}
+  .nav{position:fixed;bottom:24px;right:28px;display:flex;gap:8px;z-index:20}
+  .nav button{
+    width:42px;height:42px;border-radius:11px;border:1px solid var(--line);
+    background:rgba(8,21,46,.7);color:var(--white);font-size:18px;cursor:pointer;
+    display:grid;place-items:center;backdrop-filter:blur(8px);transition:.2s;
+  }
+  .nav button:hover{background:var(--cyan);color:#03101f;border-color:var(--cyan)}
+  .nav button:focus-visible{outline:3px solid var(--cyan-bright);outline-offset:2px}
+  .counter{position:fixed;bottom:30px;left:50%;transform:translateX(-50%);font-family:var(--mono);font-size:12px;color:var(--mute);z-index:20;letter-spacing:.1em}
+
+  .hint{position:fixed;top:22px;right:28px;font-family:var(--mono);font-size:11px;color:var(--mute);z-index:20;opacity:.7}
+
+  @media (max-width:880px){
+    .agenda,.cols,.close .takeaways{grid-template-columns:1fr}
+    .grid2{grid-template-columns:1fr;gap:26px}
+    .compare .row{grid-template-columns:1fr}
+    .compare .lab{background:var(--navy-3)!important}
+  }
+  @media (prefers-reduced-motion:reduce){
+    .slide{transition:opacity .2s}
+    *{scroll-behavior:auto}
+  }
+</style>
+</head>
+<body>
+<div class="progress" id="progress"></div>
+<div class="hint">← → para navegar</div>
+
+<div class="deck" id="deck">
+
+  <!-- 1 · COVER -->
+  <section class="slide cover active">
+    
+    <div class="content">
+      <span class="kicker">Clase 6</span>
+      <h1>GitHub, Seguridad<br>y <span class="accent">Deploy Básico</span></h1>
+      <p class="lead">De tu código local a una página publicada en internet — protegiendo tus secretos en el camino.</p>
+      <div class="sub">
+        <span class="chip">Seguridad de repos</span>
+        <span class="chip">Antigravity vs AI Studio</span>
+        <span class="chip">GitHub Pages</span>
+      </div>
+    </div>
+    <div class="footer"><span>CLASE 6 / 12</span></div>
+  </section>
+
+  <!-- 2 · QUÉ ES GITHUB -->
+  <section class="slide">
+    <div class="content">
+      <span class="eyebrow">Introducción · GitHub</span>
+      <h2>¿Qué es <span class="accent">GitHub</span>?</h2>
+      <p class="lead">Un servicio en la nube donde guardas, versionas y colaboras en código. Piénsalo como Google Drive, pero para proyectos de software — con superpoderes.</p>
+      <div class="agenda" style="margin-top:28px">
+        <div class="acard">
+          <span class="ic">📦</span>
+          <span class="num">Repositorio</span>
+          <h3>Tu carpeta del proyecto</h3>
+          <p>Cada proyecto vive en un <b>repo</b>. Contiene todos tus archivos y el historial completo de cambios.</p>
+        </div>
+        <div class="acard">
+          <span class="ic">🕐</span>
+          <span class="num">Control de versiones</span>
+          <h3>Máquina del tiempo</h3>
+          <p>Cada <b>commit</b> es una foto del estado de tu código. Puedes volver atrás en cualquier momento.</p>
+        </div>
+        <div class="acard">
+          <span class="ic">🤝</span>
+          <span class="num">Colaboración</span>
+          <h3>Trabajo en equipo</h3>
+          <p>Varias personas pueden trabajar en el mismo proyecto sin pisarse. Las <b>ramas</b> separan el trabajo de cada uno.</p>
+        </div>
+      </div>
+    </div>
+    <div class="footer"><span>¿Qué es GitHub?</span><span>02 / 12</span></div>
+  </section>
+
+  <!-- 3 · INTERFAZ DE GITHUB -->
+  <section class="slide light">
+    <div class="content">
+      <span class="eyebrow">Introducción · Interfaz</span>
+      <h2>La interfaz de <span class="accent">GitHub</span></h2>
+      <p class="lead">Cinco zonas clave que vas a usar en cada proyecto.</p>
+      <div class="cols" style="margin-top:22px;grid-template-columns:repeat(5,1fr);gap:14px">
+        <div style="border:1px solid rgba(26,125,196,.25);border-radius:14px;padding:18px 16px;background:rgba(26,125,196,.06)">
+          <div style="font-size:22px;margin-bottom:8px">📁</div>
+          <h4 style="font-size:15px;color:var(--navy-2);margin-bottom:6px">Code</h4>
+          <p style="font-size:13px;color:#56708f;line-height:1.5">Explora archivos y carpetas del repo. Desde aquí editas directamente en el navegador.</p>
+        </div>
+        <div style="border:1px solid rgba(26,125,196,.25);border-radius:14px;padding:18px 16px;background:rgba(26,125,196,.06)">
+          <div style="font-size:22px;margin-bottom:8px">🐛</div>
+          <h4 style="font-size:15px;color:var(--navy-2);margin-bottom:6px">Issues</h4>
+          <p style="font-size:13px;color:#56708f;line-height:1.5">Reporta bugs, propone mejoras o gestiona tareas pendientes del proyecto.</p>
+        </div>
+        <div style="border:1px solid rgba(26,125,196,.25);border-radius:14px;padding:18px 16px;background:rgba(26,125,196,.06)">
+          <div style="font-size:22px;margin-bottom:8px">🔀</div>
+          <h4 style="font-size:15px;color:var(--navy-2);margin-bottom:6px">Pull Requests</h4>
+          <p style="font-size:13px;color:#56708f;line-height:1.5">Propone cambios para revisión antes de fusionarlos con el código principal.</p>
+        </div>
+        <div style="border:1px solid rgba(26,125,196,.25);border-radius:14px;padding:18px 16px;background:rgba(26,125,196,.06)">
+          <div style="font-size:22px;margin-bottom:8px">⚙️</div>
+          <h4 style="font-size:15px;color:var(--navy-2);margin-bottom:6px">Actions</h4>
+          <p style="font-size:13px;color:#56708f;line-height:1.5">Automatiza tareas: tests, deploys y más se ejecutan solos cuando subes código.</p>
+        </div>
+        <div style="border:1px solid rgba(26,125,196,.25);border-radius:14px;padding:18px 16px;background:rgba(26,125,196,.06)">
+          <div style="font-size:22px;margin-bottom:8px">🔧</div>
+          <h4 style="font-size:15px;color:var(--navy-2);margin-bottom:6px">Settings</h4>
+          <p style="font-size:13px;color:#56708f;line-height:1.5">Configura el repo: visibilidad, colaboradores, GitHub Pages y secretos de entorno.</p>
+        </div>
+      </div>
+      <div style="margin-top:20px;padding:14px 20px;border-radius:12px;background:rgba(26,125,196,.08);border:1px solid rgba(26,125,196,.2);font-size:14px;color:#3b5170">
+        💡 <b>Flujo básico:</b> escribes código → <code style="font-family:var(--mono);background:rgba(26,125,196,.12);padding:2px 6px;border-radius:4px">git add</code> → <code style="font-family:var(--mono);background:rgba(26,125,196,.12);padding:2px 6px;border-radius:4px">git commit</code> → <code style="font-family:var(--mono);background:rgba(26,125,196,.12);padding:2px 6px;border-radius:4px">git push</code> → tu código aparece en el repo online.
+      </div>
+    </div>
+    <div class="footer" style="color:#5b7090"><span>Interfaz GitHub</span><span>03 / 12</span></div>
+  </section>
+
+  <!-- 4 · DICCIONARIO GIT -->
+  <section class="slide">
+    <div class="content">
+      <span class="eyebrow">Introducción · Comandos</span>
+      <h2>Diccionario <span class="accent">Git</span></h2>
+      <p class="lead">Los comandos que vas a usar en cada sesión de trabajo.</p>
+      <div style="display:flex;flex-direction:column;gap:10px;margin-top:22px">
+
+        <div style="display:grid;grid-template-columns:220px 1fr 1fr;gap:0;border:1px solid var(--line);border-radius:14px;overflow:hidden">
+          <div style="padding:14px 18px;background:rgba(52,182,240,.1);font-family:var(--mono);font-size:14px;color:var(--cyan-bright);display:flex;align-items:center">git init</div>
+          <div style="padding:14px 18px;background:rgba(52,182,240,.04);font-size:14px;display:flex;align-items:center;border-left:1px solid var(--line)">Inicializa un repositorio Git en tu carpeta local.</div>
+          <div style="padding:14px 18px;font-size:13px;color:var(--mute);display:flex;align-items:center;border-left:1px solid var(--line)">Solo se hace una vez por proyecto.</div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:220px 1fr 1fr;gap:0;border:1px solid var(--line);border-radius:14px;overflow:hidden">
+          <div style="padding:14px 18px;background:rgba(52,182,240,.1);font-family:var(--mono);font-size:14px;color:var(--cyan-bright);display:flex;align-items:center">git add .</div>
+          <div style="padding:14px 18px;background:rgba(52,182,240,.04);font-size:14px;display:flex;align-items:center;border-left:1px solid var(--line)">Marca todos los archivos modificados como "listos para guardar".</div>
+          <div style="padding:14px 18px;font-size:13px;color:var(--mute);display:flex;align-items:center;border-left:1px solid var(--line)">El punto (.) significa "todo". Puedes poner un archivo específico.</div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:220px 1fr 1fr;gap:0;border:1px solid var(--line);border-radius:14px;overflow:hidden">
+          <div style="padding:14px 18px;background:rgba(52,182,240,.1);font-family:var(--mono);font-size:14px;color:var(--cyan-bright);display:flex;align-items:center">git commit -m "..."</div>
+          <div style="padding:14px 18px;background:rgba(52,182,240,.04);font-size:14px;display:flex;align-items:center;border-left:1px solid var(--line)">Saca una foto del estado actual del código y le pone nombre.</div>
+          <div style="padding:14px 18px;font-size:13px;color:var(--mute);display:flex;align-items:center;border-left:1px solid var(--line)">El mensaje describe qué cambiaste. Ej: "agrego formulario de contacto".</div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:220px 1fr 1fr;gap:0;border:1px solid var(--line);border-radius:14px;overflow:hidden">
+          <div style="padding:14px 18px;background:rgba(52,182,240,.1);font-family:var(--mono);font-size:14px;color:var(--cyan-bright);display:flex;align-items:center">git push</div>
+          <div style="padding:14px 18px;background:rgba(52,182,240,.04);font-size:14px;display:flex;align-items:center;border-left:1px solid var(--line)">Sube los commits locales al repositorio en GitHub.</div>
+          <div style="padding:14px 18px;font-size:13px;color:var(--mute);display:flex;align-items:center;border-left:1px solid var(--line)">Tu código pasa de tu máquina a la nube.</div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:220px 1fr 1fr;gap:0;border:1px solid var(--line);border-radius:14px;overflow:hidden">
+          <div style="padding:14px 18px;background:rgba(52,182,240,.1);font-family:var(--mono);font-size:14px;color:var(--cyan-bright);display:flex;align-items:center">git pull</div>
+          <div style="padding:14px 18px;background:rgba(52,182,240,.04);font-size:14px;display:flex;align-items:center;border-left:1px solid var(--line)">Descarga los cambios que hay en GitHub hacia tu máquina.</div>
+          <div style="padding:14px 18px;font-size:13px;color:var(--mute);display:flex;align-items:center;border-left:1px solid var(--line)">Úsalo siempre antes de empezar a trabajar en equipo.</div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:220px 1fr 1fr;gap:0;border:1px solid var(--line);border-radius:14px;overflow:hidden">
+          <div style="padding:14px 18px;background:rgba(52,182,240,.1);font-family:var(--mono);font-size:14px;color:var(--cyan-bright);display:flex;align-items:center">git status</div>
+          <div style="padding:14px 18px;background:rgba(52,182,240,.04);font-size:14px;display:flex;align-items:center;border-left:1px solid var(--line)">Muestra qué archivos fueron modificados y cuáles están listos para commit.</div>
+          <div style="padding:14px 18px;font-size:13px;color:var(--mute);display:flex;align-items:center;border-left:1px solid var(--line)">Tu comando "¿en qué estado estoy?" antes de hacer cualquier cosa.</div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:220px 1fr 1fr;gap:0;border:1px solid var(--line);border-radius:14px;overflow:hidden">
+          <div style="padding:14px 18px;background:rgba(52,182,240,.1);font-family:var(--mono);font-size:14px;color:var(--cyan-bright);display:flex;align-items:center">git clone &lt;url&gt;</div>
+          <div style="padding:14px 18px;background:rgba(52,182,240,.04);font-size:14px;display:flex;align-items:center;border-left:1px solid var(--line)">Descarga una copia completa de un repositorio remoto a tu máquina.</div>
+          <div style="padding:14px 18px;font-size:13px;color:var(--mute);display:flex;align-items:center;border-left:1px solid var(--line)">La URL la sacas del botón verde "Code" en GitHub.</div>
+        </div>
+
+      </div>
+    </div>
+    <div class="footer"><span>Diccionario Git</span><span>04 / 12</span></div>
+  </section>
+
+  <!-- 5 · AGENDA -->
+  <section class="slide">
+    
+    <div class="content">
+      <span class="eyebrow">Qué veremos hoy</span>
+      <h2>Tres bloques, un objetivo</h2>
+      <p class="lead">Publicar tu primer <code style="font-family:var(--mono);color:var(--cyan-bright)">index.html</code> de forma segura y autónoma.</p>
+      <div class="agenda">
+        <div class="acard">
+          <span class="ic">🔐</span>
+          <span class="num">01</span>
+          <h3>Seguridad en GitHub</h3>
+          <p>El error que arruina proyectos: filtrar API Keys en repos públicos. Cómo evitarlo.</p>
+        </div>
+        <div class="acard">
+          <span class="ic">🛰️</span>
+          <span class="num">02</span>
+          <h3>Antigravity</h3>
+          <p>Crear repositorios de forma autónoma desde adentro vs. el commit manual de Google AI Studio.</p>
+        </div>
+        <div class="acard">
+          <span class="ic">🚀</span>
+          <span class="num">03</span>
+          <h3>Deploy con GitHub Pages</h3>
+          <p>Hosting gratuito de un único HTML, publicado en tu dominio <code style="font-family:var(--mono);color:var(--cyan-bright)">.github.io</code>.</p>
+        </div>
+      </div>
+    </div>
+    <div class="footer"><span>Agenda</span><span>05 / 12</span></div>
+  </section>
+
+  <!-- 3 · SEGURIDAD · el error -->
+  <section class="slide">
+    
+    <div class="content">
+      <span class="eyebrow">Bloque 01 · Seguridad</span>
+      <h2>El error #1: <span class="accent">API Keys públicas</span></h2>
+      <p class="lead">Subir una clave a un repo público es como dejar las llaves de tu casa pegadas en la puerta. Los bots la encuentran en segundos.</p>
+      <div class="grid2">
+        <div class="stack">
+          <div class="point"><span class="b">!</span><span class="t"><b>Se quedan en el historial.</b> <span>Borrar el archivo no basta: la clave sigue en commits anteriores.</span></span></div>
+          <div class="point"><span class="b">!</span><span class="t"><b>Se escanean automáticamente.</b> <span>Existen bots que rastrean GitHub buscando claves expuestas 24/7.</span></span></div>
+          <div class="point"><span class="b">!</span><span class="t"><b>El costo es real.</b> <span>Una key de OpenAI o AWS filtrada puede generar cobros enormes en horas.</span></span></div>
+        </div>
+        <div class="term">
+          <div class="bar"><i class="r"></i><i class="y"></i><i class="g"></i><span class="path">~/mi-proyecto</span></div>
+          <div class="body">
+<span class="l"><span class="cmt"># ❌ Nunca hagas esto</span></span>
+<span class="l"><span class="prompt">const</span> apiKey = <span class="str">"sk-proj-9fA2k...REAL"</span>;</span>
+<span class="l"><span class="prompt">$</span> git add . && git commit -m <span class="str">"app"</span></span>
+<span class="l"><span class="prompt">$</span> git push origin main</span>
+<span class="l"><span class="bad">⚠ key detectada por un bot en 11s</span></span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="footer"><span>Seguridad</span><span>06 / 12</span></div>
+  </section>
+
+  <!-- 4 · SEGURIDAD · cómo protegerse -->
+  <section class="slide">
+    
+    <div class="content">
+      <span class="eyebrow">Bloque 01 · Buenas prácticas</span>
+      <h2>Cómo proteger tus <span class="accent">secretos</span></h2>
+      <div class="cols">
+        <div class="panel bad">
+          <h3>❌ Lo que NO se sube</h3>
+          <ul>
+            <li>API Keys o tokens directamente en el código</li>
+            <li>Archivos <code style="font-family:var(--mono)">.env</code> con credenciales</li>
+            <li>Contraseñas de bases de datos o conexiones</li>
+            <li>Claves privadas (<code style="font-family:var(--mono)">.pem</code>, <code style="font-family:var(--mono)">.key</code>)</li>
+          </ul>
+        </div>
+        <div class="panel good">
+          <h3>✓ La forma correcta</h3>
+          <ul>
+            <li>Guardar las claves en un archivo <code style="font-family:var(--mono)">.env</code></li>
+            <li>Agregar <code style="font-family:var(--mono)">.env</code> al <code style="font-family:var(--mono)">.gitignore</code></li>
+            <li>Usar variables de entorno o GitHub Secrets</li>
+            <li>Si se filtró: rotar la clave de inmediato</li>
+          </ul>
+        </div>
+      </div>
+      <div class="term" style="margin-top:24px">
+        <div class="bar"><i class="r"></i><i class="y"></i><i class="g"></i><span class="path">.gitignore</span></div>
+        <div class="body">
+<span class="l"><span class="cmt"># Ignorar secretos antes del primer push</span></span>
+<span class="l"><span class="ok">.env</span></span>
+<span class="l"><span class="ok">.env.local</span>   <span class="cmt"># nunca llegará a GitHub</span></span>
+        </div>
+      </div>
+    </div>
+    <div class="footer"><span>Seguridad</span><span>07 / 12</span></div>
+  </section>
+
+  <!-- 5 · ANTIGRAVITY · qué es -->
+  <section class="slide">
+    
+    <div class="content">
+      <span class="eyebrow">Bloque 02 · Antigravity</span>
+      <h2>¿Qué es <span class="accent">Antigravity</span>?</h2>
+      <p class="lead">Un entorno donde la IA no solo escribe código, sino que actúa sobre tu repositorio: crea, organiza y versiona de forma autónoma — sin que tú copies y pegues archivo por archivo.</p>
+      <div class="grid2">
+        <div class="stack">
+          <div class="point"><span class="b">→</span><span class="t"><b>Acceso interno al repo.</b> <span>Trabaja directamente sobre GitHub, no como una caja aislada.</span></span></div>
+          <div class="point"><span class="b">→</span><span class="t"><b>Creación autónoma.</b> <span>Genera la estructura de archivos y carpetas por sí mismo.</span></span></div>
+          <div class="point"><span class="b">→</span><span class="t"><b>Menos fricción.</b> <span>Pasas de la idea al repositorio sin pasos manuales repetitivos.</span></span></div>
+        </div>
+        <div class="term">
+          <div class="bar"><i class="r"></i><i class="y"></i><i class="g"></i><span class="path">antigravity · agent</span></div>
+          <div class="body">
+<span class="l"><span class="prompt">▸</span> creando repo <span class="str">mi-landing</span>...</span>
+<span class="l"><span class="ok">✓</span> index.html</span>
+<span class="l"><span class="ok">✓</span> styles.css</span>
+<span class="l"><span class="ok">✓</span> .gitignore</span>
+<span class="l"><span class="ok">✓</span> commit + push automático</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="footer"><span>Antigravity</span><span>08 / 12</span></div>
+  </section>
+
+  <!-- 6 · COMPARATIVA -->
+  <section class="slide">
+    
+    <div class="content">
+      <span class="eyebrow">Bloque 02 · Comparativa</span>
+      <h2>Antigravity <span style="color:var(--mute);font-weight:400">vs</span> commit manual</h2>
+      <p class="lead">Dos formas de llevar tu código a GitHub. Una es autónoma; la otra, paso a paso desde Google AI Studio.</p>
+      <div class="compare">
+        <div class="row head">
+          <div class="lab" style="color:var(--mute)">Criterio</div>
+          <div class="h-anti">🛰️ Antigravity</div>
+          <div class="h-ais">✋ Google AI Studio (manual)</div>
+        </div>
+        <div class="row">
+          <div class="lab">Creación del repo</div>
+          <div>Autónoma, desde adentro</div>
+          <div>Tú lo creas en GitHub</div>
+        </div>
+        <div class="row">
+          <div class="lab">Subir archivos</div>
+          <div>Automático</div>
+          <div>Copiar / pegar o commit manual</div>
+        </div>
+        <div class="row">
+          <div class="lab">Velocidad</div>
+          <div>Alta — pocos pasos</div>
+          <div>Más lenta, archivo por archivo</div>
+        </div>
+        <div class="row">
+          <div class="lab">Control fino</div>
+          <div>Delegas a la IA</div>
+          <div>Total — tú decides cada commit</div>
+        </div>
+        <div class="row">
+          <div class="lab">Ideal para</div>
+          <div>Prototipos y arranque rápido</div>
+          <div>Aprender Git y cambios puntuales</div>
+        </div>
+      </div>
+    </div>
+    <div class="footer"><span>Comparativa</span><span>09 / 12</span></div>
+  </section>
+
+  <!-- 7 · GITHUB PAGES intro -->
+  <section class="slide">
+    
+    <div class="content">
+      <span class="eyebrow">Bloque 03 · Deploy</span>
+      <h2>GitHub Pages: tu HTML en internet</h2>
+      <p class="lead">Hosting gratuito y directo desde tu repositorio. Subes un <code style="font-family:var(--mono);color:var(--cyan-bright)">index.html</code> y GitHub te entrega una URL pública.</p>
+      <div class="grid2">
+        <div class="stack">
+          <div class="point"><span class="b">✓</span><span class="t"><b>Gratis y sin servidor.</b> <span>No necesitas contratar hosting ni configurar nada complejo.</span></span></div>
+          <div class="point"><span class="b">✓</span><span class="t"><b>Un solo archivo basta.</b> <span>Con <code style="font-family:var(--mono);color:var(--cyan-bright)">index.html</code> en la raíz ya tienes una web.</span></span></div>
+          <div class="point"><span class="b">✓</span><span class="t"><b>URL automática.</b> <span>Tu sitio vive en <code style="font-family:var(--mono);color:var(--cyan-bright)">usuario.github.io/repo</code>.</span></span></div>
+        </div>
+        <div class="term">
+          <div class="bar"><i class="r"></i><i class="y"></i><i class="g"></i><span class="path">tu sitio en vivo</span></div>
+          <div class="body">
+<span class="l"><span class="prompt">URL:</span></span>
+<span class="l"><span class="ok">https://</span><span class="str">usuario</span>.github.io/<span class="str">mi-repo</span></span>
+<span class="l"><span class="cmt"># publicado y accesible para todos</span></span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="footer"><span>GitHub Pages</span><span>10 / 12</span></div>
+  </section>
+
+  <!-- 8 · PASOS DEPLOY -->
+  <section class="slide">
+    
+    <div class="content">
+      <span class="eyebrow">Bloque 03 · Paso a paso</span>
+      <h2>Publicar en 4 pasos</h2>
+      <div class="steps">
+        <div class="step"><span class="n">1</span><div class="x"><h4>Crea el repositorio</h4><p>En GitHub, nuevo repo <b>público</b>. Sube tu archivo <code>index.html</code> a la raíz.</p></div></div>
+        <div class="step"><span class="n">2</span><div class="x"><h4>Entra a Settings → Pages</h4><p>Dentro del repo, abre <code>Settings</code> y busca la sección <code>Pages</code> en el menú lateral.</p></div></div>
+        <div class="step"><span class="n">3</span><div class="x"><h4>Selecciona la rama</h4><p>En <i>Source</i> elige la rama <code>main</code> y la carpeta <code>/ (root)</code>. Guarda.</p></div></div>
+        <div class="step"><span class="n">4</span><div class="x"><h4>Abre tu URL</h4><p>En 1–2 minutos GitHub publica el sitio en <code>usuario.github.io/repo</code>. ¡Listo!</p></div></div>
+      </div>
+    </div>
+    <div class="footer"><span>Deploy</span><span>11 / 12</span></div>
+  </section>
+
+  <!-- 9 · CIERRE -->
+  <section class="slide light close">
+    
+    <div class="content">
+      <span class="eyebrow">Para llevar</span>
+      <h2 style="color:var(--navy-2)">Lo esencial de la Clase 6</h2>
+      <div class="takeaways">
+        <div class="tk" style="background:rgba(26,125,196,.06);border-color:rgba(26,125,196,.2)">
+          <span class="ic">🔐</span>
+          <h4 style="color:var(--navy-2)">Protege tus secretos</h4>
+          <p style="color:#56708f">Las API Keys nunca van al código. Usa <b>.env</b> + <b>.gitignore</b>. Si se filtra, rota la clave.</p>
+        </div>
+        <div class="tk" style="background:rgba(26,125,196,.06);border-color:rgba(26,125,196,.2)">
+          <span class="ic">🛰️</span>
+          <h4 style="color:var(--navy-2)">Elige tu flujo</h4>
+          <p style="color:#56708f">Antigravity para velocidad autónoma; el commit manual de AI Studio para control y aprendizaje.</p>
+        </div>
+        <div class="tk" style="background:rgba(26,125,196,.06);border-color:rgba(26,125,196,.2)">
+          <span class="ic">🚀</span>
+          <h4 style="color:var(--navy-2)">Publica fácil</h4>
+          <p style="color:#56708f">Un <b>index.html</b> + GitHub Pages = tu web en vivo, gratis, en minutos.</p>
+        </div>
+      </div>
+      <p class="cta">¿Listos? → próximo paso: subamos su primer sitio juntos.</p>
+    </div>
+    <div class="footer" style="color:#5b7090"><span>2026</span><span>12 / 12</span></div>
+  </section>
+
+</div>
+
+<div class="counter"><span id="cur">1</span> / <span id="total">12</span></div>
+<div class="nav">
+  <button id="prev" aria-label="Anterior">‹</button>
+  <button id="next" aria-label="Siguiente">›</button>
+</div>
+
+<script>
+  const slides=[...document.querySelectorAll('.slide')];
+  const total=slides.length;
+  let i=0;
+  const prog=document.getElementById('progress');
+  const cur=document.getElementById('cur');
+  document.getElementById('total').textContent=total;
+
+  function show(n){
+    i=Math.max(0,Math.min(total-1,n));
+    slides.forEach((s,k)=>s.classList.toggle('active',k===i));
+    prog.style.width=((i+1)/total*100)+'%';
+    cur.textContent=i+1;
+  }
+  function next(){show(i+1)}
+  function prev(){show(i-1)}
+
+  document.getElementById('next').onclick=next;
+  document.getElementById('prev').onclick=prev;
+  document.addEventListener('keydown',e=>{
+    if(['ArrowRight','ArrowDown',' ','PageDown'].includes(e.key)){e.preventDefault();next()}
+    if(['ArrowLeft','ArrowUp','PageUp'].includes(e.key)){e.preventDefault();prev()}
+    if(e.key==='Home')show(0);
+    if(e.key==='End')show(total-1);
+  });
+  // swipe (móvil)
+  let x0=null;
+  document.addEventListener('touchstart',e=>x0=e.touches[0].clientX,{passive:true});
+  document.addEventListener('touchend',e=>{
+    if(x0===null)return;
+    const dx=e.changedTouches[0].clientX-x0;
+    if(Math.abs(dx)>50){dx<0?next():prev()}
+    x0=null;
+  },{passive:true});
+
+  show(0);
+</script>
+</body>
+</html>
